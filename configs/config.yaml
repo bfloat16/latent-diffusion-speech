@@ -1,0 +1,94 @@
+data:
+  f0_extractor: 'fcpe' # 'parselmouth', 'dio', 'harvest', 'crepe', 'rmvpe' or 'fcpe'
+  f0_min: 40 # about C2
+  f0_max: 1200 # about G5
+  sampling_rate: 44100
+  block_size: 512 # Equal to hop_length
+  duration: 2 # Audio duration during training, must be less than the duration of the shortest audio clip
+  encoder: 'hubertsoft1024l24' # 'hubertsoft', 'hubertbase', 'hubertbase768', 'contentvec', 'contentvec768' or 'contentvec768l12' or 'cnhubertsoftfish'
+  cnhubertsoft_gate: 10 # only use with cnhubertsoftfish
+  encoder_sample_rate: 16000
+  encoder_hop_size: 320
+  encoder_out_channels: 1024 # 256 if using 'hubertsoft'
+  encoder_ckpt: pretrain/chinese-hubert-large-fairseq-ckpt.pt
+  units_forced_mode: 'nearest' # Recommended 'nearest',experiment 'rfa512to441' and 'rfa441to512' ; 'left'  only use for compatible with history code
+  volume_noise: 0 # if not 0 ,add noise for volume in train ;;;;EXPERIMENTAL FUNCTION, NOT RECOMMENDED FOR USE;;;;
+  train_path: data/train # Create a folder named "audio" under this path and put the audio clip in it
+  valid_path: data/val # Create a folder named "audio" under this path and put the audio clip in it
+  extensions: # List of extension included in the data collection
+    - wav
+model:
+  type: 'Diffusion'
+  n_layers: 2
+  n_heads: 8
+  block_out_channels: [256,384,512,512]
+  n_chans: 512
+  n_hidden: 256
+  use_pitch_aug: true
+  n_spk: 2308 # max number of different speakers
+  is_tts: true # If TTS or VC, it is true, if SVC, it is false
+  text2semantic:
+    type: 'roformer'
+    mode: 'phone' # choice: phone, phone+text, phone+bert, phone+text+bert
+    semantic_kmeans_num: 2048
+    codebook_path: 'pretrain/semantic_codebook.pt'
+    train:
+      batch_size: 9
+      lr: 0.0002
+      decay_step: 100000
+      gamma: 0.5
+      weight_decay: 0
+      save_opt: true
+      cache_all_data: true
+      num_workers: 2
+      gradient_accumulation_steps: 1
+      epochs: 100000
+      generate_audio: True
+      expdir: exp/lm
+      warm_up_steps: 1000
+      start_lr: 1e-5
+      clip_grad_norm: -1 # -1 means no clip
+    model:
+      num_hidden_layers: 3
+      hidden_size: 128
+      num_attention_heads: 8
+      intermediate_size: 1024
+      hidden_act: "gelu"
+      hidden_dropout_prob: 0.3
+      attention_probs_dropout_prob: 0.3
+      initializer_range: 0.02
+      layer_norm_eps: 1e-12
+      max_position_embeddings: 3072
+      n_spk: 2308
+device: cuda
+vocoder:
+  type: 'nsf-hifigan'
+  ckpt: 'pretrain/nsf_hifigan/model'
+infer:
+  speedup: 10
+  method: 'unipc' # 'ddim', 'pndm', 'dpm-solver' or 'unipc'
+env:
+  expdir: exp/diffusion
+  gpu_id: 0
+train:
+  num_workers: 4 # If your cpu and gpu are both very strong, set to 0 may be faster!
+  amp_dtype: fp16 # fp32, fp16 or bf16 (fp16 or bf16 may be faster if it is supported by your gpu)
+  batch_size: 50
+  cache_all_data: false # Save Internal-Memory or Graphics-Memory if it is false, but may be slow
+  cache_device: 'cpu' # Set to 'cuda' to cache the data into the Graphics-Memory, fastest speed for strong gpu
+  cache_fp16: false
+  epochs: 100000
+  interval_log: 100
+  interval_val: 10000
+  interval_force_save: 10000
+  lr: 0.00012
+  decay_step: 1000000
+  gamma: 0.5
+  weight_decay: 0
+  save_opt: false
+  last_save_model_num: 4
+  use_units_quantize: true # If you want to use your own quantization, set to true
+  units_quantize_type: kmeans # 'kmean' or 'vq'
+  warm_up_steps: 1000
+  start_lr: 1e-5
+  clip_grad_norm: 1 # -1 means no clip

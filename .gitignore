@@ -1,0 +1,8 @@
+.vscode/*
+data/*
+exp/*
+pretrain/*
+dataset_raw/*
+__pycache__
+**/*.npy
+**/*.txt
