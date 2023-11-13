@@ -23,7 +23,12 @@ rich_progress = Progress(
     transient=False
     )
 
-def preprocess(rank, path, units_encoder, sample_rate, hop_size, num_workers, device='cuda'):
+def preprocess(rank, path, sample_rate, hop_size, num_workers, encoder, encoder_ckpt, encoder_sample_rate, encoder_hop_size, units_forced_mode, device='cuda'):
+    if encoder == 'cnhubertsoftfish':
+        cnhubertsoft_gate = cnhubertsoft_gate
+    else:
+        cnhubertsoft_gate = 10
+    units_encoder = Units_Encoder(encoder, encoder_ckpt, encoder_sample_rate, encoder_hop_size, cnhubertsoft_gate=cnhubertsoft_gate, device=device, units_forced_mode=units_forced_mode)
     path = path[rank::num_workers]
 
     with rich_progress:
@@ -44,36 +49,25 @@ def preprocess(rank, path, units_encoder, sample_rate, hop_size, num_workers, de
             np.save(path_unitsfile, units)
             rich_progress.update(rank, advance=1)
 
-def main(train_path, units_encoder, sample_rate, hop_size, num_workers=1):  
-    filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
-    manager = mp.Manager()
-    data_q = manager.Queue()
-
-    def put_units_encoder(queue, units_encoder):
-        queue.put(units_encoder)
-
-    receiver = mp.Process(target=put_units_encoder, args=(data_q, units_encoder))
-    receiver.start()
-    mp.spawn(preprocess, args=(filelist, data_q.get(), sample_rate, hop_size, num_workers), nprocs=num_workers, join=True)
-    receiver.join()
-
-if __name__ == '__main__':
+def main():  
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
     parser.add_argument("-n", "--num_workers", type=int, default=3)
     cmd = parser.parse_args()
-
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args = utils.load_config(cmd.config)
+    
     train_path = args.data.train_path
     sample_rate = args.data.sampling_rate
     hop_size = args.data.block_size
     num_workers = cmd.num_workers
+    encoder = args.data.encoder
+    encoder_ckpt = args.data.encoder_ckpt
+    encoder_sample_rate = args.data.encoder_sample_rate
+    encoder_hop_size = args.data.encoder_hop_size
+    units_forced_mode = args.data.units_forced_mode
 
-    if args.data.encoder == 'cnhubertsoftfish':
-        cnhubertsoft_gate = args.data.cnhubertsoft_gate
-    else:
-        cnhubertsoft_gate = 10
-    units_encoder = Units_Encoder(args.data.encoder, args.data.encoder_ckpt, args.data.encoder_sample_rate, args.data.encoder_hop_size, cnhubertsoft_gate=cnhubertsoft_gate, device=device, units_forced_mode=args.data.units_forced_mode)
+    filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
+    mp.spawn(preprocess, args=(filelist, sample_rate, hop_size, num_workers, encoder, encoder_ckpt, encoder_sample_rate, encoder_hop_size, units_forced_mode), nprocs=num_workers, join=True)
 
-    main(train_path, units_encoder, sample_rate, hop_size, num_workers)
+if __name__ == '__main__':
+    main()
