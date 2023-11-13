@@ -63,7 +63,7 @@ def main(train_path, f0_extractor, sample_rate, num_workers=1):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=10)
+    parser.add_argument("-n", "--num_workers", type=int, default=14)
     cmd = parser.parse_args()
 
     args = utils.load_config(cmd.config)
