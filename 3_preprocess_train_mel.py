@@ -50,12 +50,6 @@ def preprocess(rank, path, mel_extractor, sample_rate, num_workers, device='cuda
             np.save(path_augmelfile, aug_mel)
             rich_progress.update(rank, advance=1)
 
-def parse_args(args=None, namespace=None):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=15)
-    return parser.parse_args(args=args, namespace=namespace)
-
 def main(train_path, mel_extractor, sample_rate, num_workers=1):
     filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
     manager = mp.Manager()
@@ -70,7 +64,11 @@ def main(train_path, mel_extractor, sample_rate, num_workers=1):
     receiver.join()
 
 if __name__ == '__main__':
-    cmd = parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
+    parser.add_argument("-n", "--num_workers", type=int, default=15)
+    cmd = parser.parse_args()
+    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args = utils.load_config(cmd.config)
     train_path = args.data.train_path

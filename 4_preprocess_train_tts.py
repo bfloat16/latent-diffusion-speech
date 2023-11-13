@@ -8,15 +8,8 @@ from text.cleaner import text_to_sequence
 
 def parse_args(args=None, namespace=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-c",
-        "--config",
-        type=str,
-        default="./configs/config.yaml",
-        required=False,
-        help="path to the config file")
+    parser.add_argument("-c", "--config", type=str, default="./configs/config.yaml", required=False)
     return parser.parse_args(args=args, namespace=namespace)
-
 
 def preprocess(path, extensions=['wav']):
     path_srcdir = os.path.join(path, 'audio')
