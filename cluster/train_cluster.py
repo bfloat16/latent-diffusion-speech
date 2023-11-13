@@ -13,7 +13,7 @@ from sklearn.cluster import KMeans, MiniBatchKMeans
 def train_cluster(dataset, n_clusters, use_minibatch=True, verbose=False,use_gpu=False):
     filenames = glob(f"{dataset}/*/*.wav.npy", recursive=True)
     shuffle(filenames)
-    selected_filenames = filenames[:15000]
+    selected_filenames = filenames[:20000]
 
     if os.path.exists(tempset):
         shutil.rmtree(tempset)

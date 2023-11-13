@@ -27,25 +27,26 @@ def preprocess(path, extensions=['wav']):
     filelist = traverse_dir(path_srcdir, extensions=extensions, is_pure=True, is_sort=True, is_ext=True)
     main = rich_progress.add_task("Preprocess", total=len(filelist))
 
-    for file in filelist:
-        binfile = file + '.npy'
-        path_uttfile = os.path.join(path_srcdir, file)
-        path_uttfile = os.path.dirname(path_uttfile)
-        path_uttfile = os.path.join(path_uttfile,"utt_txt.txt")
-        with open(path_uttfile,"r",encoding="UTF8") as f:
-            utt_text = {}
-            for f_i in f.readlines():
-                k, v = f_i.replace("\n","").split("|")
-                utt_text[k] = v
-        path_uttfile = os.path.join(path_uttdir, binfile)
-        
-        file_name = os.path.split(file)[-1]
-        text = utt_text[file_name]
-        (phones, tones, lang_ids), (norm_text, word2ph) = text_to_sequence(text, "ZH")
+    with rich_progress:
+        for file in filelist:
+            binfile = file + '.npy'
+            path_uttfile = os.path.join(path_srcdir, file)
+            path_uttfile = os.path.dirname(path_uttfile)
+            path_uttfile = os.path.join(path_uttfile,"utt_txt.txt")
+            with open(path_uttfile,"r",encoding="UTF8") as f:
+                utt_text = {}
+                for f_i in f.readlines():
+                    k, v = f_i.replace("\n","").split("|")
+                    utt_text[k] = v
+            path_uttfile = os.path.join(path_uttdir, binfile)
+            
+            file_name = os.path.split(file)[-1]
+            text = utt_text[file_name]
+            (phones, tones, lang_ids), (norm_text, word2ph) = text_to_sequence(text, "ZH")
 
-        os.makedirs(os.path.dirname(path_uttfile), exist_ok=True)
-        np.save(path_uttfile, np.array((np.array(phones), np.array(tones), np.array(lang_ids), np.array(word2ph)),dtype=object), allow_pickle=True)
-        rich_progress.update(main, advance=1)
+            os.makedirs(os.path.dirname(path_uttfile), exist_ok=True)
+            np.save(path_uttfile, np.array((np.array(phones), np.array(tones), np.array(lang_ids), np.array(word2ph)),dtype=object), allow_pickle=True)
+            rich_progress.update(main, advance=1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

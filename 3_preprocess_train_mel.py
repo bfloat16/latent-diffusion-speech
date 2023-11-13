@@ -66,7 +66,7 @@ def main(train_path, mel_extractor, sample_rate, num_workers=1):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=15)
+    parser.add_argument("-n", "--num_workers", type=int, default=20)
     cmd = parser.parse_args()
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
