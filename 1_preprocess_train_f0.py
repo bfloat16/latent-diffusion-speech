@@ -42,7 +42,7 @@ def preprocess(rank, path, f0_extractor, sample_rate, num_workers):
                 os.makedirs(os.path.dirname(path_f0file), exist_ok=True)
                 np.save(path_f0file, f0)
             else:
-                print('\n[Error] F0 extraction failed: ' + file)
+                print('[Error] F0 extraction failed: ' + file)
                 os.remove(file)
                 os.remove(file.replace('.wav', '.lab'))
             rich_progress.update(rank, advance=1)
@@ -63,7 +63,7 @@ def main(train_path, f0_extractor, sample_rate, num_workers=1):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=14)
+    parser.add_argument("-n", "--num_workers", type=int, default=15)
     cmd = parser.parse_args()
 
     args = utils.load_config(cmd.config)

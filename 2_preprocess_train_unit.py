@@ -20,7 +20,7 @@ rich_progress = Progress(
     TimeElapsedColumn(),
     "|",
     TimeRemainingColumn(),
-    transient=False
+    transient=True
     )
 
 def preprocess(rank, path, sample_rate, hop_size, num_workers, encoder, encoder_ckpt, encoder_sample_rate, encoder_hop_size, units_forced_mode, device='cuda'):

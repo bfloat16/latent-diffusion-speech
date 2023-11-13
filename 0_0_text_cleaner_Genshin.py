@@ -3,6 +3,19 @@ import os
 import random
 from tqdm import tqdm
 from glob import glob
+from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
+
+rich_progress = Progress(
+    TextColumn("Preprocess:"),
+    BarColumn(bar_width=80), "[progress.percentage]{task.percentage:>3.1f}%",
+    "•",
+    MofNCompleteColumn(),
+    "•",
+    TimeElapsedColumn(),
+    "|",
+    TimeRemainingColumn(),
+    transient=True
+    )
 
 def Genshin_ZH_clean(text, wav_name):
     PRONOUN_DICT = {
@@ -104,28 +117,30 @@ def process_lab_text(lab_file, wav_file):
     return lab_text
 
 def main(input_dir):
-    for subdir in tqdm(os.listdir(input_dir)):
-        subdir_path = os.path.join(input_dir, subdir)
-        utt_txt_file = os.path.join(subdir_path, 'utt_txt.txt')
-        if os.path.exists(utt_txt_file):
-            os.remove(utt_txt_file)
+    main = rich_progress.add_task("Preprocess", total=len(os.listdir(input_dir)))
+    with rich_progress:
+        for subdir in os.listdir(input_dir):
+            subdir_path = os.path.join(input_dir, subdir)
+            utt_txt_file = os.path.join(subdir_path, 'utt_txt.txt')
+            if os.path.exists(utt_txt_file):
+                os.remove(utt_txt_file)
 
-        lab_files = glob(os.path.join(subdir_path, '*.lab'))
-        for lab_file in lab_files:
-            wav_file = lab_file.replace('.lab', '.wav')
-            if not os.path.exists(wav_file):
-                os.remove(lab_file)
-                continue
-            processed_lab_text = process_lab_text(lab_file, wav_file)
-            if processed_lab_text == '':
-                os.remove(lab_file)
-                print(f'{lab_file} is removed')
-                os.remove(wav_file)
-                print(f'{wav_file} is removed')
-            else:
-                with open(os.path.join(subdir_path, 'utt_txt.txt'), 'a') as utt_txt:
-                    utt_txt.write(f'{os.path.basename(wav_file)}|{processed_lab_text}\n')
+            lab_files = glob(os.path.join(subdir_path, '*.lab'))
+            for lab_file in lab_files:
+                wav_file = lab_file.replace('.lab', '.wav')
+                if not os.path.exists(wav_file):
+                    os.remove(lab_file)
+                    continue
+                processed_lab_text = process_lab_text(lab_file, wav_file)
+                if processed_lab_text == '':
+                    os.remove(lab_file)
+                    print(f'{lab_file} is removed')
+                    os.remove(wav_file)
+                    print(f'{wav_file} is removed')
+                else:
+                    with open(os.path.join(subdir_path, 'utt_txt.txt'), 'a') as utt_txt:
+                        utt_txt.write(f'{os.path.basename(wav_file)}|{processed_lab_text}\n')
+            rich_progress.update(main, advance=1)
 
 if __name__ == '__main__':
     main(r'/home/ooppeenn/share/latent-diffusion-speech/data/train/audio')
-    main(r'/home/ooppeenn/share/latent-diffusion-speech/data/val/audio')

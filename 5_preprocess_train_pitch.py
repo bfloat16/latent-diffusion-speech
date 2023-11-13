@@ -2,7 +2,6 @@ import os
 import numpy as np
 import argparse
 from logger import utils
-from tqdm import tqdm
 from logger.utils import traverse_dir
 
 def parse_args(args=None, namespace=None):
@@ -26,7 +25,7 @@ def preprocess(path, extensions=['wav']):
         keyshift = 0
         pitch_aug_dict[file] = keyshift
 
-    for file in tqdm(filelist, total=len(filelist)):
+    for file in filelist:
         process(file)
 
     path_pitchaugdict = os.path.join(path, 'pitch_aug_dict.npy')
