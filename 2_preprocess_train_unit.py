@@ -52,7 +52,7 @@ def preprocess(rank, path, sample_rate, hop_size, num_workers, encoder, encoder_
 def main():  
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=3)
+    parser.add_argument("-n", "--num_workers", type=int, default=6)
     cmd = parser.parse_args()
     args = utils.load_config(cmd.config)
     

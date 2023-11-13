@@ -144,3 +144,4 @@ def main(input_dir):
 
 if __name__ == '__main__':
     main(r'/home/ooppeenn/share/latent-diffusion-speech/data/train/audio')
+    main(r'/home/ooppeenn/share/latent-diffusion-speech/data/val/audio')

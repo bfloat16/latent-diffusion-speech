@@ -9,11 +9,11 @@ subdirs = [os.path.join(train_dir, d) for d in os.listdir(train_dir) if os.path.
 
 dir_file_counts = [(d, len(os.listdir(d))) for d in subdirs]
 sorted_subdirs = sorted(dir_file_counts, key=lambda x: x[1], reverse=True)
-sorted_subdirs = [d for d, _ in sorted_subdirs[:5]]
+sorted_subdirs = [d for d, _ in sorted_subdirs[:10]]
 
 for subdir in sorted_subdirs:
     audio_files = [os.path.join(subdir, f) for f in os.listdir(subdir) if f.endswith(".wav") and os.path.isfile(os.path.join(subdir, f))]
-    random_audio_files = random.sample(audio_files, 5)
+    random_audio_files = random.sample(audio_files, 3)
     
     for audio_file in random_audio_files:
         dest_dir = os.path.join(val_dir, os.path.relpath(subdir, train_dir))
