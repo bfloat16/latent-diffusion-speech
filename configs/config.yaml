@@ -25,7 +25,7 @@ model:
   n_chans: 512
   n_hidden: 256
   use_pitch_aug: true
-  n_spk: 2308 # max number of different speakers
+  n_spk: 1190 # max number of different speakers
   is_tts: true # If TTS or VC, it is true, if SVC, it is false
   text2semantic:
     type: 'roformer'
@@ -59,7 +59,7 @@ model:
       initializer_range: 0.02
       layer_norm_eps: 1e-12
       max_position_embeddings: 3072
-      n_spk: 2308
+      n_spk: 1190
 device: cuda
 vocoder:
   type: 'nsf-hifigan'

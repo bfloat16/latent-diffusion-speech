@@ -52,7 +52,6 @@ class Saver(object):
             np.save(path_save_spk_emb_dict, temp_spk_emb_dict)
 
     def log_info(self, msg):
-        '''log method'''
         if isinstance(msg, dict):
             msg_list = []
             for k, v in msg.items():

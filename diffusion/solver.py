@@ -171,10 +171,7 @@ def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loade
                     optimizer_save = optimizer if args.model.text2semantic.train.save_opt else None
                     unwrap_model = accelerator.unwrap_model(model)
 
-                    if saver.global_step % args.train.interval_force_save == 0:
-                        saver.save_model(unwrap_model, optimizer_save, postfix=f'{saver.global_step}_Force')
-                    else:
-                        saver.save_model(unwrap_model, optimizer, postfix=f'{saver.global_step}')
+                    saver.save_model(unwrap_model, optimizer, postfix=f'{saver.global_step}')
 
                     last_val_step = saver.global_step - args.train.interval_val * (args.train.last_save_model_num + 1)
                     saver.delete_model(postfix=f'{last_val_step}')
