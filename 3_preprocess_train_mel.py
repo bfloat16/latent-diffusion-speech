@@ -22,8 +22,9 @@ rich_progress = Progress(
     transient=True
     )
 
-def preprocess(rank, path, mel_extractor, sample_rate, num_workers, device='cuda'):
+def preprocess(rank, path, sample_rate, num_workers, type, ckpt, device='cuda'):
     path = path[rank::num_workers]
+    mel_extractor = Vocoder(type, ckpt, device=device)
 
     with rich_progress:
         rank = rich_progress.add_task("Preprocess", total=len(path))
@@ -50,35 +51,22 @@ def preprocess(rank, path, mel_extractor, sample_rate, num_workers, device='cuda
             np.save(path_augmelfile, aug_mel)
             rich_progress.update(rank, advance=1)
 
-def main(train_path, mel_extractor, sample_rate, num_workers=1):
-    filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
-    manager = mp.Manager()
-    data_q = manager.Queue()
-
-    def put_mel_extractor(queue, mel_extractor):
-        queue.put(mel_extractor)
-
-    receiver = mp.Process(target=put_mel_extractor, args=(data_q, mel_extractor))
-    receiver.start()
-    mp.spawn(preprocess, args=(filelist, data_q.get(), sample_rate, num_workers), nprocs=num_workers, join=True)
-    receiver.join()
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=20)
+    parser.add_argument("-n", "--num_workers", type=int, default=4)
     cmd = parser.parse_args()
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args = utils.load_config(cmd.config)
+
     train_path = args.data.train_path
     sample_rate = args.data.sampling_rate
     hop_size = args.data.block_size
     num_workers = cmd.num_workers
+    type = args.vocoder.type
+    ckpt = args.vocoder.ckpt
 
-    mel_extractor = Vocoder(args.vocoder.type, args.vocoder.ckpt, device=device)
-    if mel_extractor.vocoder_sample_rate != sample_rate or mel_extractor.vocoder_hop_size != hop_size:
-        raise Exception('Unmatch vocoder parameters, mel extraction is ignored!')
-
-    main(train_path, mel_extractor, sample_rate, num_workers)
+    filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
+    mp.spawn(preprocess, args=(filelist, sample_rate, num_workers, type, ckpt, device), nprocs=num_workers, join=True)
 

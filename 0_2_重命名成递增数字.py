@@ -1,6 +1,6 @@
 import os
 
-input_dir = "/home/ooppeenn/share/latent-diffusion-speech/data/train/audio"
+input_dir = r"D:\AI\Project\latent-diffusion-speech\data\train\audio"
 
 subdirs = [os.path.join(input_dir, d) for d in os.listdir(input_dir) if os.path.isdir(os.path.join(input_dir, d))]
 subdirs.sort()

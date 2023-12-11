@@ -1,8 +1,9 @@
 import os
 import numpy as np
 import librosa
+import random
 import torch
-import torch.multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
 import argparse
 from logger import utils
 from glob import glob
@@ -23,14 +24,8 @@ rich_progress = Progress(
     transient=True
     )
 
-def preprocess(rank, path, sample_rate, hop_size, num_workers, encoder, encoder_ckpt, encoder_sample_rate, encoder_hop_size, units_forced_mode, device='cuda'):
-    if encoder == 'cnhubertsoftfish':
-        cnhubertsoft_gate = cnhubertsoft_gate
-    else:
-        cnhubertsoft_gate = 10
-    units_encoder = Units_Encoder(encoder, encoder_ckpt, encoder_sample_rate, encoder_hop_size, cnhubertsoft_gate=cnhubertsoft_gate, device=device, units_forced_mode=units_forced_mode)
-    path = path[rank::num_workers]
-
+def preprocess(path, sample_rate, hop_size, encoder, encoder_sample_rate, encoder_hop_size, units_forced_mode, device='cuda'):
+    units_encoder = Units_Encoder(encoder, encoder_sample_rate, encoder_hop_size, device=device, units_forced_mode=units_forced_mode)
     with rich_progress:
         rank = rich_progress.add_task("Preprocess", total=len(path))
         for file in path:
@@ -49,25 +44,29 @@ def preprocess(rank, path, sample_rate, hop_size, num_workers, encoder, encoder_
             np.save(path_unitsfile, units)
             rich_progress.update(rank, advance=1)
 
-def main():  
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=6)
+    parser.add_argument("-n", "--num_processes", type=int, default=8)
     cmd = parser.parse_args()
     args = utils.load_config(cmd.config)
     
     train_path = args.data.train_path
     sample_rate = args.data.sampling_rate
     hop_size = args.data.block_size
-    num_workers = cmd.num_workers
+    num_processes = cmd.num_processes
     encoder = args.data.encoder
-    encoder_ckpt = args.data.encoder_ckpt
     encoder_sample_rate = args.data.encoder_sample_rate
     encoder_hop_size = args.data.encoder_hop_size
     units_forced_mode = args.data.units_forced_mode
 
     filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
-    mp.spawn(preprocess, args=(filelist, sample_rate, hop_size, num_workers, encoder, encoder_ckpt, encoder_sample_rate, encoder_hop_size, units_forced_mode), nprocs=num_workers, join=True)
-
-if __name__ == '__main__':
-    main()
+    with ProcessPoolExecutor(max_workers=num_processes) as executor:
+        tasks = []
+        for i in range(num_processes):
+            start = int(i * len(filelist) / num_processes)
+            end = int((i + 1) * len(filelist) / num_processes)
+            file_chunk = filelist[start:end]
+            tasks.append(executor.submit(preprocess, file_chunk, sample_rate, hop_size, encoder, encoder_sample_rate, encoder_hop_size, units_forced_mode))
+        for task in tasks:
+            task.result()

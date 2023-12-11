@@ -29,22 +29,19 @@ if __name__ == '__main__':
     
     vocoder = Vocoder(args.vocoder.type, args.vocoder.ckpt, device=device)
     
-    if args.model.type == 'Diffusion':
-        model = Unit2Mel(
-                    args.data.encoder_out_channels, 
-                    args.model.n_spk,
-                    args.model.use_pitch_aug,
-                    vocoder.dimension,
-                    args.model.n_layers,
-                    args.model.block_out_channels,
-                    args.model.n_heads,
-                    args.model.n_hidden,
-                    use_speaker_encoder=args.model.use_speaker_encoder,
-                    speaker_encoder_out_channels=args.data.speaker_encoder_out_channels,
-                    is_tts=args.model.is_tts
-                    )  
-    else:
-        raise ValueError(f"[x] Unknown Model: {args.model.type}")
+    model = Unit2Mel(
+                args.data.encoder_out_channels, 
+                args.model.n_spk,
+                args.model.use_pitch_aug,
+                vocoder.dimension,
+                args.model.n_layers,
+                args.model.block_out_channels,
+                args.model.n_heads,
+                args.model.n_hidden,
+                use_speaker_encoder=args.model.use_speaker_encoder,
+                speaker_encoder_out_channels=args.data.speaker_encoder_out_channels,
+                is_tts=args.model.is_tts
+                )
 
     if args.train.use_units_quantize:
         if args.train.units_quantize_type == "kmeans":

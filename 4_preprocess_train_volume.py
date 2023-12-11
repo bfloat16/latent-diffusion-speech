@@ -22,8 +22,9 @@ rich_progress = Progress(
     transient=True
     )
 
-def preprocess(rank, path, volume_extractor, sample_rate, num_workers, device='cuda'):
+def preprocess(rank, path, sample_rate, num_workers, block_size, device='cuda'):
     path = path[rank::num_workers]
+    volume_extractor = Volume_Extractor(hop_size=512, block_size=block_size, model_sampling_rate=sample_rate)
 
     with rich_progress:
         rank = rich_progress.add_task("Preprocess", total=len(path))
@@ -50,32 +51,19 @@ def preprocess(rank, path, volume_extractor, sample_rate, num_workers, device='c
             np.save(path_augvolfile, aug_vol)
             rich_progress.update(rank, advance=1)
 
-def main(train_path, volume_extractor, sample_rate, num_workers=1):
-    filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
-    manager = mp.Manager()
-    data_q = manager.Queue()
-
-    def put_volume_extractor(queue, mel_extractor):
-        queue.put(mel_extractor)
-
-    receiver = mp.Process(target=put_volume_extractor, args=(data_q, volume_extractor))
-    receiver.start()
-    mp.spawn(preprocess, args=(filelist, data_q.get(), sample_rate, num_workers), nprocs=num_workers, join=True)
-    receiver.join()
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=20)
+    parser.add_argument("-n", "--num_workers", type=int, default=4)
     cmd = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     args = utils.load_config(cmd.config)
+    train_path = args.data.train_path
     sample_rate = args.data.sampling_rate
-    hop_size = args.data.block_size
+    block_size = args.data.block_size
     num_workers = cmd.num_workers
 
-    volume_extractor = Volume_Extractor(hop_size=512, block_size=args.data.block_size, model_sampling_rate=args.data.sampling_rate)
-
-    main(args.data.train_path, volume_extractor, sample_rate, num_workers)
+    filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
+    mp.spawn(preprocess, args=(filelist, sample_rate, num_workers, block_size), nprocs=num_workers, join=True)

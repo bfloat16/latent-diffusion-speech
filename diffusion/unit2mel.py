@@ -96,7 +96,8 @@ class Unit2Mel(nn.Module):
             if n_spk is not None and n_spk > 1:
                 self.spk_embed = nn.Embedding(n_spk, n_hidden)
         # diffusion
-        self.decoder = GaussianDiffusion(UNet1DConditionModel(in_channels=out_dims + n_hidden,
+        self.decoder = GaussianDiffusion(UNet1DConditionModel(
+        in_channels=out_dims + n_hidden,
         out_channels=out_dims,
         block_out_channels=block_out_channels,
         norm_num_groups=8,

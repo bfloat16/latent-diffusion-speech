@@ -42,7 +42,7 @@ def preprocess(path, extensions=['wav']):
             
             file_name = os.path.split(file)[-1]
             text = utt_text[file_name]
-            (phones, tones, lang_ids), (norm_text, word2ph) = text_to_sequence(text, "ZH")
+            (phones, tones, lang_ids), (norm_text, word2ph) = text_to_sequence(text, 'ZH')
 
             os.makedirs(os.path.dirname(path_uttfile), exist_ok=True)
             np.save(path_uttfile, np.array((np.array(phones), np.array(tones), np.array(lang_ids), np.array(word2ph)),dtype=object), allow_pickle=True)

@@ -335,6 +335,7 @@ class AudioDataset(Dataset):
             volume_frames = np.array([-1])
 
         spk_id = data_buffer.get('spk_id')
+        #print('==>', spk_id, name_ext)
 
         return dict(mel=mel, f0=f0_frames, volume=volume_frames, units=units, spk_id=spk_id, aug_shift=aug_shift, name=name, name_ext=name_ext, spk_emb=spk_emb)
 

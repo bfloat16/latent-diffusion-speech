@@ -2,18 +2,11 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-import pyworld as pw
-import parselmouth
-import torchcrepe
 import librosa
-from transformers import HubertModel, Wav2Vec2FeatureExtractor, Wav2Vec2ForCTC
 from fairseq import checkpoint_utils
-from encoder.hubert.model import HubertSoft
-from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
 from torchaudio.transforms import Resample
 from torch.optim.lr_scheduler import StepLR
-
-CREPE_RESAMPLE_KERNEL = {}
+from encoder.funasr.model import SpeechEncoder
 
 class F0_Extractor:
     def __init__(self, f0_extractor, sample_rate=44100, hop_size=512, f0_min=65, f0_max=800,
@@ -27,30 +20,19 @@ class F0_Extractor:
         self.f0_max = f0_max
         self.transformer_f0 = None
         self.rmvpe = None
-        if f0_extractor == 'crepe':
-            key_str = str(sample_rate)
-            if key_str not in CREPE_RESAMPLE_KERNEL:
-                CREPE_RESAMPLE_KERNEL[key_str] = Resample(sample_rate, 16000, lowpass_filter_width=128)
-            self.resample_kernel = CREPE_RESAMPLE_KERNEL[key_str]
         if (self.block_size is not None) or (self.model_sampling_rate is not None):
             assert (self.block_size is not None) and (self.model_sampling_rate is not None)
             self.hop_size_follow_input = True
         else:
             self.hop_size_follow_input = False
 
-    def extract(self, audio, uv_interp=False, device=None, silence_front=0, sr=None, mel = None):  # audio: 1d numpy array
+    def extract(self, audio, uv_interp=False, device=None, silence_front=0, sr=None, mel = None):
         if sr is not None:
             assert self.hop_size_follow_input
             self.hop_size = self.block_size * sr / self.model_sampling_rate
-            if (self.f0_extractor == 'crepe') and (sr != self.sample_rate):
-                key_str = str(sr)
-                if key_str not in CREPE_RESAMPLE_KERNEL:
-                    CREPE_RESAMPLE_KERNEL[key_str] = Resample(sr, 16000, lowpass_filter_width=128)
-                self.resample_kernel = CREPE_RESAMPLE_KERNEL[key_str]
             self.sample_rate = sr
 
         if audio is not None:
-            # extractor start time
             raw_audio = audio
             n_frames = int(len(audio) // self.hop_size) + 1
 
@@ -58,82 +40,32 @@ class F0_Extractor:
             real_silence_front = start_frame * self.hop_size / self.sample_rate
             audio = audio[int(np.round(real_silence_front * self.sample_rate)):]
 
-        # extract f0 using parselmouth
-        if self.f0_extractor == 'parselmouth':
-            f0 = parselmouth.Sound(audio, self.sample_rate).to_pitch_ac(
-                time_step=self.hop_size / self.sample_rate,
-                voicing_threshold=0.6,
-                pitch_floor=self.f0_min,
-                pitch_ceiling=self.f0_max).selected_array['frequency']
-            pad_size = start_frame + (int(len(audio) // self.hop_size) - len(f0) + 1) // 2
-            f0 = np.pad(f0, (pad_size, n_frames - len(f0) - pad_size))
-
-        # extract f0 using dio
-        elif self.f0_extractor == 'dio':
-            _f0, t = pw.dio(
-                audio.astype('double'),
-                self.sample_rate,
-                f0_floor=self.f0_min,
-                f0_ceil=self.f0_max,
-                channels_in_octave=2,
-                frame_period=(1000 * self.hop_size / self.sample_rate))
-            f0 = pw.stonemask(audio.astype('double'), _f0, t, self.sample_rate)
-            f0 = np.pad(f0.astype('float'), (start_frame, n_frames - len(f0) - start_frame))
-
-        # extract f0 using harvest
-        elif self.f0_extractor == 'harvest':
-            f0, _ = pw.harvest(
-                audio.astype('double'),
-                self.sample_rate,
-                f0_floor=self.f0_min,
-                f0_ceil=self.f0_max,
-                frame_period=(1000 * self.hop_size / self.sample_rate))
-            f0 = np.pad(f0.astype('float'), (start_frame, n_frames - len(f0) - start_frame))
-
-        # extract f0 using crepe
-        elif self.f0_extractor == 'crepe':
-            if device is None:
-                device = 'cuda' if torch.cuda.is_available() else 'cpu'
-            resample_kernel = self.resample_kernel.to(device)
-            wav16k_torch = resample_kernel(torch.FloatTensor(audio).unsqueeze(0).to(device))
-
-            f0, pd = torchcrepe.predict(wav16k_torch, 16000, 80, self.f0_min, self.f0_max, pad=True, model='full',
-                                        batch_size=512, device=device, return_periodicity=True)
-            pd = median_pool_1d(pd, 4)
-            f0 = torchcrepe.threshold.At(0.05)(f0, pd)
-            f0 = masked_avg_pool_1d(f0, 4)
-
-            f0 = f0.squeeze(0).cpu().numpy()
+        #elif self.f0_extractor == "fcpe":
+        _JUMP_SAFE_PAD = False
+        if self.transformer_f0 is None:
+            from encoder.fcpe.model import FCPEInfer
+            self.transformer_f0 = FCPEInfer(model_path='pretrain/fcpe/fcpe.pt')
+        if _JUMP_SAFE_PAD:
+            raw_audio = audio
+        if mel is None:
+            f0 = self.transformer_f0(audio=raw_audio, sr=self.sample_rate)
+        else:
+            if audio is None:
+                n_frames = mel.shape[1]
+            f0 = self.transformer_f0.model(mel=mel, infer=True, return_hz_f0=True)
+        f0 = f0.transpose(1, 2)
+        if not _JUMP_SAFE_PAD:
+            f0 = torch.nn.functional.interpolate(f0, size=int(n_frames), mode='nearest')
+        f0 = f0.transpose(1, 2)
+        f0 = f0.squeeze().cpu().numpy()
+        if _JUMP_SAFE_PAD:
             f0 = np.array(
-                [f0[int(min(int(np.round(n * self.hop_size / self.sample_rate / 0.005)), len(f0) - 1))] for n in
-                 range(n_frames - start_frame)])
-            f0 = np.pad(f0, (start_frame, 0))
-
-        elif self.f0_extractor == "fcpe":
-            _JUMP_SAFE_PAD = False
-            if self.transformer_f0 is None:
-                from encoder.fcpe.model import FCPEInfer
-                self.transformer_f0 = FCPEInfer(model_path='pretrain/fcpe/fcpe.pt')
-            if _JUMP_SAFE_PAD:
-                raw_audio = audio
-            if mel is None:
-                f0 = self.transformer_f0(audio=raw_audio, sr=self.sample_rate)
-            else:
-                if audio is None:
-                    n_frames = mel.shape[1]
-                f0 = self.transformer_f0.model(mel=mel, infer=True, return_hz_f0=True)
-            f0 = f0.transpose(1, 2)
-            if not _JUMP_SAFE_PAD:
-                f0 = torch.nn.functional.interpolate(f0, size=int(n_frames), mode='nearest')
-            f0 = f0.transpose(1, 2)
-            f0 = f0.squeeze().cpu().numpy()
-            if _JUMP_SAFE_PAD:
-                f0 = np.array(
-                    [f0[int(min(int(np.round(n * self.hop_size / self.sample_rate / 0.01)), len(f0) - 1))] for n in
-                     range(n_frames - start_frame)])
-                f0 = np.pad(f0.astype('float'), (start_frame, n_frames - len(f0) - start_frame))
+                [f0[int(min(int(np.round(n * self.hop_size / self.sample_rate / 0.01)), len(f0) - 1))] for n in
+                    range(n_frames - start_frame)])
+            f0 = np.pad(f0.astype('float'), (start_frame, n_frames - len(f0) - start_frame))
 
         elif self.f0_extractor == "rmvpe":
+            print("RMVPE")
             if self.rmvpe is None:
                 from encoder.rmvpe import RMVPE
                 self.rmvpe = RMVPE('pretrain/rmvpe/model.pt', hop_length=160)
@@ -147,17 +79,13 @@ class F0_Extractor:
             uv = np.interp(target_time, origin_time, uv.astype(float)) > 0.5
             f0[uv] = 0
             f0 = np.pad(f0, (start_frame, 0))
-        else:
-            raise ValueError(f"[x] Unknown f0 extractor: {self.f0_extractor}")
 
-        # interpolate the unvoiced f0
         if uv_interp:
             uv = f0 == 0
             if len(f0[~uv]) > 0:
                 f0[uv] = np.interp(np.where(uv)[0], np.where(~uv)[0], f0[~uv])
             f0[f0 < self.f0_min] = self.f0_min
         return f0
-
 
 class Volume_Extractor:
     def __init__(self, hop_size=512, block_size=None, model_sampling_rate=None):
@@ -191,47 +119,26 @@ class Volume_Extractor:
         return mask
 
 class Units_Encoder:
-    def __init__(self, encoder, encoder_ckpt, encoder_sample_rate=16000, encoder_hop_size=320, device=None, cnhubertsoft_gate=10, units_forced_mode='nearest'):
+    def __init__(self, encoder, encoder_ckpt, encoder_sample_rate=16000, encoder_hop_size=320, device=None, units_forced_mode='nearest'):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = device
-
-        if cnhubertsoft_gate is None:
-            cnhubertsoft_gate = 10
         if units_forced_mode is None:
             units_forced_mode = 'left'
         self.units_forced_mode = units_forced_mode
 
         is_loaded_encoder = False
-        if encoder == 'hubertsoft':
-            self.model = Audio2HubertSoft(encoder_ckpt).to(device)
+        if encoder == 'contentvec768l12':
+            self.model = Audio2ContentVec768L12(device=device)
             is_loaded_encoder = True
-        if encoder == 'hubertbase':
-            self.model = Audio2HubertBase(encoder_ckpt, device=device)
-            is_loaded_encoder = True
-        if encoder == 'hubertbase768':
-            self.model = Audio2HubertBase768(encoder_ckpt, device=device)
-            is_loaded_encoder = True
-        if encoder == 'hubertbase768l12':
-            self.model = Audio2HubertBase768L12(encoder_ckpt, device=device)
+        if encoder == 'whisper-large':
+            self.model = WhisperLarge(device=device)
             is_loaded_encoder = True
         if encoder == 'hubertlarge1024l24':
-            self.model = Audio2HubertLarge1024L24(encoder_ckpt, device=device)
+            self.model = Audio2HubertLarge1024L24(device=device)
             is_loaded_encoder = True
-        if encoder == 'contentvec':
-            self.model = Audio2ContentVec(encoder_ckpt, device=device)
-            is_loaded_encoder = True
-        if encoder == 'contentvec768':
-            self.model = Audio2ContentVec768(encoder_ckpt, device=device)
-            is_loaded_encoder = True
-        if encoder == 'contentvec768l12':
-            self.model = Audio2ContentVec768L12(encoder_ckpt, device=device)
-            is_loaded_encoder = True
-        if encoder == 'cnhubertsoftfish':
-            self.model = CNHubertSoftFish(encoder_ckpt, device=device, gate_size=cnhubertsoft_gate)
-            is_loaded_encoder = True
-        if encoder in ('wav2vec2', 'wav2vec2-xlsr-53-espeak-cv-ft'):
-            self.model = Wav2Vec2(encoder_ckpt, device=device)
+        if encoder == 'funasr':
+            self.model = FunASR(device=device)
             is_loaded_encoder = True
         if not is_loaded_encoder:
             raise ValueError(f"[x] Unknown units encoder: {encoder}")
@@ -246,21 +153,15 @@ class Units_Encoder:
         self.encoder_sample_rate = encoder_sample_rate
         self.encoder_hop_size = encoder_hop_size
 
-    def encode(self,
-               audio,  # B, T
-               sample_rate,
-               hop_size,
-               padding_mask=None):
+    def encode(self, audio, sample_rate, hop_size,padding_mask=None):
 
-        # resample
         if self.units_forced_mode not in ('rfa441to512', 'rfa512to441'):
             if sample_rate == self.encoder_sample_rate:
                 audio_res = audio
             else:
                 key_str = str(sample_rate)
                 if key_str not in self.resample_kernel:
-                    self.resample_kernel[key_str] = Resample(sample_rate, self.encoder_sample_rate,
-                                                             lowpass_filter_width=128).to(self.device)
+                    self.resample_kernel[key_str] = Resample(sample_rate, self.encoder_sample_rate, lowpass_filter_width=128).to(self.device)
                 audio_res = self.resample_kernel[key_str](audio)
         else:
             if isinstance(audio, np.ndarray):
@@ -298,86 +199,6 @@ class Units_Encoder:
             raise ValueError(f'Unknow units_forced_mode:{self.units_forced_mode}')
         return units_aligned
 
-
-class Audio2HubertSoft(torch.nn.Module):
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320):
-        super().__init__()
-        print(' [Encoder Model] HuBERT Soft')
-        self.hubert = HubertSoft()
-        print(' [Loading] ' + path)
-        checkpoint = torch.load(path)
-        consume_prefix_in_state_dict_if_present(checkpoint, "module.")
-        self.hubert.load_state_dict(checkpoint)
-        self.hubert.eval()
-
-    def forward(self, audio, padding_mask=None):  # B, T
-        with torch.inference_mode():
-            units = self.hubert.units(audio.unsqueeze(1))
-            return units
-
-
-class Audio2ContentVec():
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
-        self.device = device
-        print(' [Encoder Model] Content Vec')
-        print(' [Loading] ' + path)
-        self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
-        self.hubert = self.models[0]
-        self.hubert = self.hubert.to(self.device)
-        self.hubert.eval()
-
-    def __call__(self, audio, padding_mask=None):  # B, T
-        # wav_tensor = torch.from_numpy(audio).to(self.device)
-        wav_tensor = audio
-        feats = wav_tensor.view(1, -1)
-        if padding_mask is None:
-            padding_mask = torch.BoolTensor(feats.shape).fill_(False)
-        else:
-            padding_mask = padding_mask.bool()
-            padding_mask = ~padding_mask if torch.all(padding_mask) else padding_mask
-        inputs = {
-            "source": feats.to(wav_tensor.device),
-            "padding_mask": padding_mask.to(wav_tensor.device),
-            "output_layer": 9,  # layer 9
-        }
-        with torch.no_grad():
-            logits = self.hubert.extract_features(**inputs)
-            feats = self.hubert.final_proj(logits[0])
-        units = feats  # .transpose(2, 1)
-        return units
-
-
-class Audio2ContentVec768():
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
-        self.device = device
-        print(' [Encoder Model] Content Vec')
-        print(' [Loading] ' + path)
-        self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
-        self.hubert = self.models[0]
-        self.hubert = self.hubert.to(self.device)
-        self.hubert.eval()
-
-    def __call__(self, audio, padding_mask=None):  # B, T
-        # wav_tensor = torch.from_numpy(audio).to(self.device)
-        wav_tensor = audio
-        feats = wav_tensor.view(1, -1)
-        if padding_mask is None:
-            padding_mask = torch.BoolTensor(feats.shape).fill_(False)
-        else:
-            padding_mask = padding_mask.bool()
-            padding_mask = ~padding_mask if torch.all(padding_mask) else padding_mask
-        inputs = {
-            "source": feats.to(wav_tensor.device),
-            "padding_mask": padding_mask.to(wav_tensor.device),
-            "output_layer": 9,  # layer 9
-        }
-        with torch.no_grad():
-            logits = self.hubert.extract_features(**inputs)
-            feats = logits[0]
-        units = feats  # .transpose(2, 1)
-        return units
-
-
 class Audio2ContentVec768L12():
     def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
         self.device = device
@@ -389,7 +210,6 @@ class Audio2ContentVec768L12():
         self.hubert.eval()
 
     def __call__(self, audio, padding_mask=None):  # B, T
-        # wav_tensor = torch.from_numpy(audio).to(self.device)
         wav_tensor = audio
         feats = wav_tensor.view(1, -1)
         if padding_mask is None:
@@ -408,132 +228,8 @@ class Audio2ContentVec768L12():
         units = feats  # .transpose(2, 1)
         return units
 
-
-class CNHubertSoftFish(torch.nn.Module):
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu', gate_size=10):
-        super().__init__()
-        self.device = device
-        print(' [Encoder Model] CN Hubert Soft fish')
-        print(' [Loading] ' + path)
-        self.gate_size = gate_size
-
-        self.feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "./pretrain/TencentGameMate/chinese-hubert-base")
-        self.model = HubertModel.from_pretrained("./pretrain/TencentGameMate/chinese-hubert-base")
-        self.proj = torch.nn.Sequential(torch.nn.Dropout(0.1), torch.nn.Linear(768, 256))
-        # self.label_embedding = nn.Embedding(128, 256)
-
-        state_dict = torch.load(path, map_location=device)
-        self.load_state_dict(state_dict)
-
-    @torch.no_grad()
-    def forward(self, audio, padding_mask=None):  # B, T
-        input_values = self.feature_extractor(
-            audio, sampling_rate=16000, return_tensors="pt"
-        ).input_values
-        input_values = input_values.to(self.model.device)
-
-        return self._forward(input_values[0])
-
-    @torch.no_grad()
-    def _forward(self, input_values):
-        features = self.model(input_values)
-        features = self.proj(features.last_hidden_state)
-
-        # Top-k gating
-        topk, indices = torch.topk(features, self.gate_size, dim=2)
-        features = torch.zeros_like(features).scatter(2, indices, topk)
-        features = features / features.sum(2, keepdim=True)
-
-        return features.to(self.device)  # .transpose(1, 2)
-
-
-class Audio2HubertBase():
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
-        self.device = device
-        print(' [Encoder Model] HuBERT Base')
-        print(' [Loading] ' + path)
-        self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
-        self.hubert = self.models[0]
-        self.hubert = self.hubert.to(self.device)
-        self.hubert = self.hubert.float()
-        self.hubert.eval()
-
-    def __call__(self, audio, padding_mask=None):  # B, T
-        with torch.no_grad():
-            if padding_mask is None:
-                padding_mask = torch.BoolTensor(audio.shape).fill_(False)
-            else:
-                padding_mask = padding_mask.bool()
-                padding_mask = ~padding_mask if torch.all(padding_mask) else padding_mask
-            inputs = {
-                "source": audio.to(self.device),
-                "padding_mask": padding_mask.to(self.device),
-                "output_layer": 9,  # layer 9
-            }
-            logits = self.hubert.extract_features(**inputs)
-            units = self.hubert.final_proj(logits[0])
-            return units
-
-
-class Audio2HubertBase768():
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
-        self.device = device
-        print(' [Encoder Model] HuBERT Base')
-        print(' [Loading] ' + path)
-        self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
-        self.hubert = self.models[0]
-        self.hubert = self.hubert.to(self.device)
-        self.hubert = self.hubert.float()
-        self.hubert.eval()
-
-    def __call__(self, audio, padding_mask=None):  # B, T
-        with torch.no_grad():
-            if padding_mask is None:
-                padding_mask = torch.BoolTensor(audio.shape).fill_(False)
-            else:
-                padding_mask = padding_mask.bool()
-                padding_mask = ~padding_mask if torch.all(padding_mask) else padding_mask
-            inputs = {
-                "source": audio.to(self.device),
-                "padding_mask": padding_mask.to(self.device),
-                "output_layer": 9,  # layer 9
-            }
-            logits = self.hubert.extract_features(**inputs)
-            units = logits[0]
-            return units
-
-
-class Audio2HubertBase768L12():
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
-        self.device = device
-        print(' [Encoder Model] HuBERT Base')
-        print(' [Loading] ' + path)
-        self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
-        self.hubert = self.models[0]
-        self.hubert = self.hubert.to(self.device)
-        self.hubert = self.hubert.float()
-        self.hubert.eval()
-
-    def __call__(self, audio, padding_mask=None):  # B, T
-        with torch.no_grad():
-            if padding_mask is None:
-                padding_mask = torch.BoolTensor(audio.shape).fill_(False)
-            else:
-                padding_mask = padding_mask.bool()
-                padding_mask = ~padding_mask if torch.all(padding_mask) else padding_mask
-            inputs = {
-                "source": audio.to(self.device),
-                "padding_mask": padding_mask.to(self.device),
-                "output_layer": 12,  # layer 12
-            }
-            logits = self.hubert.extract_features(**inputs)
-            units = logits[0]
-            return units
-
-
 class Audio2HubertLarge1024L24():
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
+    def __init__(self, path='pretrain/chinese-hubert-large-fairseq-ckpt.pt', h_sample_rate=16000, h_hop_size=320, device='cpu'):
         self.device = device
         print('HubertLarge1024L24')
         self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
@@ -557,20 +253,49 @@ class Audio2HubertLarge1024L24():
             logits = self.hubert.extract_features(**inputs)
             units = logits[0]
             return units
-
-
-class Wav2Vec2:
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
+        
+class WhisperLarge():
+    def __init__(self, path="pretrain/large-v2.pt", device='cpu'):
         self.device = device
-        self.model = Wav2Vec2ForCTC.from_pretrained(path)
+        print('WhisperLarge')
+        checkpoint = torch.load(path, map_location=device)
+        dims = ModelDimensions(**checkpoint["dims"])
+        model = Whisper(dims)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        self.hidden_dim = dims
+        self.model = model.to(self.device)
         self.model.eval()
-        self.model.to(device)
 
-    def __call__(self, audio, padding_mask=None):  # B, T
+    def __call__(self, audio, padding_mask=None):
+        audln = audio.shape[0]
+        ppgln = audln // 320
+        mel = log_mel_spectrogram(audio).to(self.device)
+        print(mel.shape)
         with torch.no_grad():
-            logits = self.model(audio).logits
-        return logits
+            ppg = self.model.encoder(mel).squeeze().data.cpu().float().numpy()
+            print(ppg.shape)
+            ppg = torch.FloatTensor(ppg[:ppgln, ]).to(self.device)
+            print(ppg.shape)
+            return ppg[None, :, :].transpose(1, 2)
 
+class FunASR(torch.nn.Module):
+    def __init__(self, path='pretrain/funasr/model.pb', device='cpu'):
+        super().__init__()
+        print('FunASR')
+        model_path = path  # Assign the value of path to model_path
+        config_path = model_path.replace('model.pb', 'config.yaml')
+        cmvn_path = model_path.replace('model.pb', 'am.mvn')
+        self.model = SpeechEncoder(config_path, model_path, cmvn_path, device=device)
+
+    @torch.inference_mode()
+    def forward(self, audio, padding_mask=None):
+        audio = audio.view(1,-1)
+        if padding_mask is None:
+            padding_mask = torch.tensor([audio.shape[-1]]).to(audio.device)
+        else:
+            padding_mask = padding_mask.sum(1)
+        units = self.model(audio, padding_mask)
+        return units
 
 class DotDict(dict):
     def __getattr__(*args):
@@ -588,16 +313,8 @@ def masked_avg_pool_1d(x, kernel_size):
     masked_x = torch.where(mask, x, torch.zeros_like(x))
     ones_kernel = torch.ones(x.size(1), 1, kernel_size, device=x.device)
 
-    # Perform sum pooling
-    sum_pooled = F.conv1d(
-        masked_x,
-        ones_kernel,
-        stride=1,
-        padding=0,
-        groups=x.size(1),
-    )
+    sum_pooled = F.conv1d(masked_x, ones_kernel, stride=1, padding=0, groups=x.size(1))
 
-    # Count the non-masked (valid) elements in each pooling window
     valid_count = F.conv1d(
         mask.float(),
         ones_kernel,
@@ -605,13 +322,11 @@ def masked_avg_pool_1d(x, kernel_size):
         padding=0,
         groups=x.size(1),
     )
-    valid_count = valid_count.clamp(min=1)  # Avoid division by zero
+    valid_count = valid_count.clamp(min=1)
 
-    # Perform masked average pooling
     avg_pooled = sum_pooled / valid_count
 
     return avg_pooled.squeeze(1)
-
 
 def median_pool_1d(x, kernel_size):
     x = x.unsqueeze(1)
@@ -621,14 +336,11 @@ def median_pool_1d(x, kernel_size):
     x, _ = torch.sort(x, dim=-1)
     return x[:, :, (kernel_size - 1) // 2]
 
-
 def upsample(signal, factor):
     signal = signal.permute(0, 2, 1)
-    signal = nn.functional.interpolate(torch.cat((signal, signal[:, :, -1:]), 2), size=signal.shape[-1] * factor + 1,
-                                       mode='linear', align_corners=True)
+    signal = nn.functional.interpolate(torch.cat((signal, signal[:, :, -1:]), 2), size=signal.shape[-1] * factor + 1, mode='linear', align_corners=True)
     signal = signal[:, :, :-1]
     return signal.permute(0, 2, 1)
-
 
 def cross_fade(a: np.ndarray, b: np.ndarray, idx: int):
     result = np.zeros(idx + b.shape[0])

@@ -5,12 +5,10 @@ data:
   sampling_rate: 44100
   block_size: 512 # Equal to hop_length
   duration: 2 # Audio duration during training, must be less than the duration of the shortest audio clip
-  encoder: 'hubertlarge1024l24' # 'hubertsoft', 'hubertbase', 'hubertbase768', 'contentvec', 'contentvec768' or 'contentvec768l12' or 'cnhubertsoftfish'
-  cnhubertsoft_gate: 10 # only use with cnhubertsoftfish
+  encoder: 'funasr'
   encoder_sample_rate: 16000
   encoder_hop_size: 320
-  encoder_out_channels: 1024 # 256 if using 'hubertsoft'
-  encoder_ckpt: pretrain/chinese-hubert-large-fairseq-ckpt.pt
+  encoder_out_channels: 512 # 256 if using 'hubertsoft'
   units_forced_mode: 'nearest' # Recommended 'nearest',experiment 'rfa512to441' and 'rfa441to512' ; 'left'  only use for compatible with history code
   volume_noise: 0 # if not 0 ,add noise for volume in train ;;;;EXPERIMENTAL FUNCTION, NOT RECOMMENDED FOR USE;;;;
   train_path: data/train # Create a folder named "audio" under this path and put the audio clip in it
@@ -18,14 +16,13 @@ data:
   extensions: # List of extension included in the data collection
     - wav
 model:
-  type: 'Diffusion'
   n_layers: 2
   n_heads: 8
   block_out_channels: [256,384,512,512]
   n_chans: 512
   n_hidden: 256
   use_pitch_aug: true
-  n_spk: 1190 # max number of different speakers
+  n_spk: 77 # max number of different speakers
   is_tts: true # If TTS or VC, it is true, if SVC, it is false
   text2semantic:
     type: 'roformer'
@@ -33,7 +30,7 @@ model:
     semantic_kmeans_num: 2048
     codebook_path: 'pretrain/semantic_codebook.pt'
     train:
-      batch_size: 10
+      batch_size: 8
       lr: 0.0002
       decay_step: 200000
       gamma: 0.5
@@ -59,7 +56,7 @@ model:
       initializer_range: 0.02
       layer_norm_eps: 1e-12
       max_position_embeddings: 3072
-      n_spk: 1190
+      n_spk: 47
 device: cuda
 vocoder:
   type: 'nsf-hifigan'
@@ -79,7 +76,7 @@ train:
   cache_fp16: false
   epochs: 100000
   interval_log: 100
-  interval_val: 10000
+  interval_val: 5000
   interval_force_save: 10000
   lr: 0.00012
   decay_step: 1000000

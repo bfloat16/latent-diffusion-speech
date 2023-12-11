@@ -21,12 +21,11 @@ def train_cluster(dataset, n_clusters, use_minibatch=True, verbose=False,use_gpu
 
     for path in tqdm(selected_filenames):
         not_processed_feature = np.load(path)
-        if not_processed_feature.shape[1] != 1024:
+        if not_processed_feature.shape[1] != 512    :
             print(path)
         not_processed_feature = not_processed_feature.astype(np.float32)
         save_path = os.path.join(tempset, os.path.basename(path)) 
         np.save(save_path, not_processed_feature)
-
     filename = glob(f"{tempset}/*.wav.npy", recursive=True)
 
     features = []

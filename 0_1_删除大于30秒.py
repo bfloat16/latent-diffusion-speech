@@ -25,7 +25,7 @@ def get_wav_duration(wav_file):
         print(f"Error reading {wav_file}: {e}")
         return None
 
-def delete_short_wav_files(folder_path, tag_duration=30):
+def delete_short_wav_files(folder_path, tag_duration=20):
     main = rich_progress.add_task("Preprocess", total=len(os.listdir(folder_path)))
     with rich_progress:
         for root, _, files in os.walk(folder_path):
@@ -41,5 +41,5 @@ def delete_short_wav_files(folder_path, tag_duration=30):
             rich_progress.update(main, advance=1)
 
 if __name__ == "__main__":
-    folder_path = r'/home/ooppeenn/share/latent-diffusion-speech/data/train/audio'
+    folder_path = r'D:\AI\Project\latent-diffusion-speech\data\train\audio'
     delete_short_wav_files(folder_path)
