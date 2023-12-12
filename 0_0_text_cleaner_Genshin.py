@@ -1,7 +1,6 @@
 import re
 import os
 import random
-from tqdm import tqdm
 from glob import glob
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 

@@ -6,6 +6,7 @@ import torch
 import random
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 from torch.utils.data import Dataset
+from tools.tools import units_forced_alignment
 
 progress = Progress(
     TextColumn("Loading: "),
@@ -33,17 +34,14 @@ def traverse_dir(
     for root, _, files in os.walk(root_dir):
         for file in files:
             if any([file.endswith(f".{ext}") for ext in extensions]):
-                # path
                 mix_path = os.path.join(root, file)
                 pure_path = mix_path[len(root_dir) + 1:] if is_pure else mix_path
 
-                # amount
                 if (amount is not None) and (cnt == amount):
                     if is_sort:
                         file_list.sort()
                     return file_list
 
-                # check string
                 if (str_include is not None) and (str_include not in pure_path):
                     continue
                 if (str_exclude is not None) and (str_exclude in pure_path):
@@ -57,7 +55,6 @@ def traverse_dir(
     if is_sort:
         file_list.sort()
     return file_list
-
 
 def get_data_loaders(args, whole_audio=False, accelerator=None):
     if args.data.volume_noise == 0:
@@ -80,6 +77,7 @@ def get_data_loaders(args, whole_audio=False, accelerator=None):
         spk_encoder_mode=args.data.speaker_encoder_mode,
         volume_noise=volume_noise,
         is_tts = args.model.is_tts,
+        units_forced_mode = args.data.units_forced_mode,
         accelerator=accelerator
     )
     loader_train = torch.utils.data.DataLoader(
@@ -103,6 +101,7 @@ def get_data_loaders(args, whole_audio=False, accelerator=None):
         spk_encoder_mode=args.data.speaker_encoder_mode,
         volume_noise=volume_noise,
         is_tts = args.model.is_tts,
+        units_forced_mode = args.data.units_forced_mode,
         accelerator=None
     )
     loader_valid = torch.utils.data.DataLoader(
@@ -114,7 +113,6 @@ def get_data_loaders(args, whole_audio=False, accelerator=None):
     )
     return loader_train, loader_valid
 
-
 class AudioDataset(Dataset):
     def __init__(
             self,
@@ -124,7 +122,6 @@ class AudioDataset(Dataset):
             sample_rate,
             load_all_data=True,
             whole_audio=False,
-            extensions=['wav'],
             n_spk=1,
             device='cpu',
             fp16=False,
@@ -133,6 +130,7 @@ class AudioDataset(Dataset):
             spk_encoder_mode='each_spk',
             volume_noise=None,
             is_tts=True,
+            units_forced_mode = "nearest",
             accelerator=None
     ):
         super().__init__()
@@ -150,6 +148,7 @@ class AudioDataset(Dataset):
             is_sort=True,
             is_ext=True
         )
+        self.units_forced_mode = units_forced_mode
         self.whole_audio = whole_audio
         self.use_aug = use_aug
         self.data_buffer = {}
@@ -196,7 +195,6 @@ class AudioDataset(Dataset):
                     if self.spk_name_id_map.get(dirname_split) is None:
                         self.spk_name_id_map[dirname_split] = t_spk_id
                         t_spk_id += 1
-                    #print('==>', n_spk, t_spk_id, dirname_split, self.spk_name_id_map)
                     if t_spk_id < 1 or t_spk_id > n_spk + 1:
                         raise ValueError('[x] Muiti-speaker traing error : spk_id must be a positive integer from 1 to n_spk')
                 else:
@@ -258,11 +256,9 @@ class AudioDataset(Dataset):
         try:
             name_ext = self.paths[file_idx]
             data_buffer = self.data_buffer[name_ext]
-            # check duration. if too short, then skip
             if data_buffer['duration'] < (self.waveform_sec + 0.1):
                 return self.__getitem__((file_idx + 1) % len(self.paths))
 
-            # get item
             return self.get_data(name_ext, data_buffer)
         except Exception as e:
             return self.__getitem__((file_idx + 1) % len(self.paths))
@@ -292,10 +288,12 @@ class AudioDataset(Dataset):
         if units is None:
             units = os.path.join(self.path_root, 'units', name_ext) + '.npy'
             units = np.load(units)
+            units = units_forced_alignment(units, n_frames=mel.shape[0], units_forced_mode=self.units_forced_mode)
             units_len = units.shape[0]
             units = units[start_frame: start_frame + units_frame_len]
             units = torch.from_numpy(units).float()
         else:
+            units = units_forced_alignment(units, n_frames=mel.shape[0], units_forced_mode=self.units_forced_mode)
             units = units[start_frame: start_frame + units_frame_len]
 
         spk_emb = data_buffer.get('spk_emb')
@@ -335,7 +333,6 @@ class AudioDataset(Dataset):
             volume_frames = np.array([-1])
 
         spk_id = data_buffer.get('spk_id')
-        #print('==>', spk_id, name_ext)
 
         return dict(mel=mel, f0=f0_frames, volume=volume_frames, units=units, spk_id=spk_id, aug_shift=aug_shift, name=name, name_ext=name_ext, spk_emb=spk_emb)
 

@@ -1,6 +1,5 @@
 import os
 import numpy as np
-import torch
 import librosa
 import argparse
 from glob import glob
@@ -13,7 +12,7 @@ warnings.filterwarnings("ignore")
 
 def preprocess(path, sample_rate, f0_extractor, f0_min, f0_max, block_size, sampling_rate):
 
-    f0_extractor = F0_Extractor(f0_extractor=f0_extractor, sample_rate=44100, hop_size=512, f0_min=f0_min, f0_max=f0_max, block_size=block_size, model_sampling_rate=sampling_rate)
+    f0_extractor = F0_Extractor(sample_rate=44100, hop_size=512, f0_min=f0_min, f0_max=f0_max, block_size=block_size, model_sampling_rate=sampling_rate)
 
     for file in tqdm(path):
         path_f0file = file.replace('audio', 'f0', 1)
@@ -45,7 +44,6 @@ if __name__ == '__main__':
     hop_size = args.data.block_size
     num_processes = cmd.num_processes
 
-    f0_extractor=args.data.f0_extractor
     f0_min=args.data.f0_min
     f0_max=args.data.f0_max
     block_size=args.data.block_size
@@ -58,6 +56,6 @@ if __name__ == '__main__':
             start = int(i * len(filelist) / num_processes)
             end = int((i + 1) * len(filelist) / num_processes)
             file_chunk = filelist[start:end]
-            tasks.append(executor.submit(preprocess, file_chunk, sample_rate, f0_extractor, f0_min, f0_max, block_size, sampling_rate))
+            tasks.append(executor.submit(preprocess, file_chunk, sample_rate, f0_min, f0_max, block_size, sampling_rate))
         for task in tasks:
             task.result()

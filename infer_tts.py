@@ -3,15 +3,16 @@ import torch
 import argparse
 from tools.infer_tools import DiffusionSVC
 from text2semantic.utils import get_language_model
+from tools.tools import units_forced_alignment
 import yaml
 from tools.tools import DotDict
 from text.cleaner import text_to_sequence
 from cluster import get_cluster_model
 import soundfile as sf
 import numpy as np
+from vector_quantize_pytorch import VectorQuantize
 
 def parse_args(args=None, namespace=None):
-    """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-dm",
@@ -74,20 +75,16 @@ def parse_args(args=None, namespace=None):
     )
     return parser.parse_args(args=args, namespace=namespace)
 
-
 if __name__ == '__main__':
     with torch.no_grad():
-        # parse commands
         cmd = parse_args()
         
         device = cmd.device
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        # 加载扩散模型
-        diffusion_svc = DiffusionSVC(device=device)  # 加载模型
+        diffusion_svc = DiffusionSVC(device=device)
         diffusion_svc.load_model(model_path=cmd.diffusion_model, f0_model="fcpe", f0_max=800, f0_min=65)
-        # 加载语言模型
         config_file = os.path.join(os.path.split(cmd.language_model)[0], 'config.yaml')
         with open(config_file, "r") as config:
             args = yaml.safe_load(config)
@@ -105,7 +102,6 @@ if __name__ == '__main__':
             semantic_embedding.weight.data = torch.from_numpy(codebook)
             semantic_embedding.to(device)
         elif args.train.units_quantize_type == "vq":
-            from vector_quantize_pytorch import VectorQuantize
             semantic_embedding = VectorQuantize(
                     dim = args.data.encoder_out_channels,
                     codebook_size = args.model.text2semantic.semantic_kmeans_num,
@@ -119,11 +115,10 @@ if __name__ == '__main__':
         else:
             raise ValueError(' [x] Unknown quantize_type: ' + args.train.units_quantize_type)
 
-        lm = get_language_model(**args.model.text2semantic)
+        lm = get_language_model(**args.model.text2semantic).to(device)
         lm.load_state_dict(torch.load(cmd.language_model, map_location=torch.device(device))["model"])
         lm.eval()
 
-        # 生成语音
         text = cmd.input
         spk_id = cmd.spk_id
         speedup = cmd.speedup
@@ -160,6 +155,7 @@ if __name__ == '__main__':
             semantic_emb = semantic_embedding(semantic_token)
         elif args.train.units_quantize_type == "vq":
             semantic_emb = semantic_embedding.get_codes_from_indices(semantic_token)
+            semantic_emb = units_forced_alignment(semantic_emb, scale_factor=(diffusion_svc.args.data.sampling_rate/diffusion_svc.args.data.block_size)/(diffusion_svc.args.data.encoder_sample_rate/args.data.encoder_hop_size), units_forced_mode=diffusion_svc.args.data.units_forced_mode)
 
         wav = diffusion_svc.infer(semantic_emb,f0=None,volume=None, spk_id = spk_id, infer_speedup=speedup, method=method)
         

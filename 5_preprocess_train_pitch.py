@@ -35,7 +35,6 @@ if __name__ == '__main__':
     cmd = parse_args()
     args = utils.load_config(cmd.config)
     use_pitch_aug = False
-    extensions = args.data.extensions
 
-    preprocess(args.data.train_path, extensions=extensions)
+    preprocess(args.data.train_path)
 

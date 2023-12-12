@@ -6,27 +6,25 @@ import librosa
 from fairseq import checkpoint_utils
 from torchaudio.transforms import Resample
 from torch.optim.lr_scheduler import StepLR
-from encoder.funasr.model import SpeechEncoder
+from encoder.whisper.audio import log_mel_spectrogram
+from encoder.whisper.model import ModelDimensions, Whisper
 
 class F0_Extractor:
-    def __init__(self, f0_extractor, sample_rate=44100, hop_size=512, f0_min=65, f0_max=800,
-                 block_size=None, model_sampling_rate=None):
+    def __init__(self, sample_rate=44100, hop_size=512, f0_min=65, f0_max=800, block_size=None, model_sampling_rate=None):
         self.block_size = block_size
         self.model_sampling_rate = model_sampling_rate
-        self.f0_extractor = f0_extractor
         self.sample_rate = sample_rate
         self.hop_size = hop_size
         self.f0_min = f0_min
         self.f0_max = f0_max
         self.transformer_f0 = None
-        self.rmvpe = None
         if (self.block_size is not None) or (self.model_sampling_rate is not None):
             assert (self.block_size is not None) and (self.model_sampling_rate is not None)
             self.hop_size_follow_input = True
         else:
             self.hop_size_follow_input = False
 
-    def extract(self, audio, uv_interp=False, device=None, silence_front=0, sr=None, mel = None):
+    def extract(self, audio, silence_front=0, sr=None, mel = None):
         if sr is not None:
             assert self.hop_size_follow_input
             self.hop_size = self.block_size * sr / self.model_sampling_rate
@@ -40,11 +38,10 @@ class F0_Extractor:
             real_silence_front = start_frame * self.hop_size / self.sample_rate
             audio = audio[int(np.round(real_silence_front * self.sample_rate)):]
 
-        #elif self.f0_extractor == "fcpe":
         _JUMP_SAFE_PAD = False
         if self.transformer_f0 is None:
             from encoder.fcpe.model import FCPEInfer
-            self.transformer_f0 = FCPEInfer(model_path='pretrain/fcpe/fcpe.pt')
+            self.transformer_f0 = FCPEInfer(model_path='pretrain/fcpe.pt')
         if _JUMP_SAFE_PAD:
             raw_audio = audio
         if mel is None:
@@ -64,29 +61,6 @@ class F0_Extractor:
                     range(n_frames - start_frame)])
             f0 = np.pad(f0.astype('float'), (start_frame, n_frames - len(f0) - start_frame))
 
-        elif self.f0_extractor == "rmvpe":
-            print("RMVPE")
-            if self.rmvpe is None:
-                from encoder.rmvpe import RMVPE
-                self.rmvpe = RMVPE('pretrain/rmvpe/model.pt', hop_length=160)
-            f0 = self.rmvpe.infer_from_audio(audio, self.sample_rate, device=device, thred=0.03, use_viterbi=False)
-            uv = f0 == 0
-            if len(f0[~uv]) > 0:
-                f0[uv] = np.interp(np.where(uv)[0], np.where(~uv)[0], f0[~uv])
-            origin_time = 0.01 * np.arange(len(f0))
-            target_time = self.hop_size / self.sample_rate * np.arange(n_frames - start_frame)
-            f0 = np.interp(target_time, origin_time, f0)
-            uv = np.interp(target_time, origin_time, uv.astype(float)) > 0.5
-            f0[uv] = 0
-            f0 = np.pad(f0, (start_frame, 0))
-
-        if uv_interp:
-            uv = f0 == 0
-            if len(f0[~uv]) > 0:
-                f0[uv] = np.interp(np.where(uv)[0], np.where(~uv)[0], f0[~uv])
-            f0[f0 < self.f0_min] = self.f0_min
-        return f0
-
 class Volume_Extractor:
     def __init__(self, hop_size=512, block_size=None, model_sampling_rate=None):
         self.block_size = block_size
@@ -98,7 +72,7 @@ class Volume_Extractor:
         else:
             self.hop_size_follow_input = False
 
-    def extract(self, audio, sr=None):  # audio: 1d numpy array
+    def extract(self, audio, sr=None):
         if sr is not None:
             assert self.hop_size_follow_input
             self.hop_size = self.block_size * sr / self.model_sampling_rate
@@ -131,14 +105,11 @@ class Units_Encoder:
         if encoder == 'contentvec768l12':
             self.model = Audio2ContentVec768L12(device=device)
             is_loaded_encoder = True
-        if encoder == 'whisper-large':
-            self.model = WhisperLarge(device=device)
+        if encoder == 'whisper':
+            self.model = Whisper(encoder_ckpt, device=device)
             is_loaded_encoder = True
         if encoder == 'hubertlarge1024l24':
             self.model = Audio2HubertLarge1024L24(device=device)
-            is_loaded_encoder = True
-        if encoder == 'funasr':
-            self.model = FunASR(device=device)
             is_loaded_encoder = True
         if not is_loaded_encoder:
             raise ValueError(f"[x] Unknown units encoder: {encoder}")
@@ -153,7 +124,7 @@ class Units_Encoder:
         self.encoder_sample_rate = encoder_sample_rate
         self.encoder_hop_size = encoder_hop_size
 
-    def encode(self, audio, sample_rate, hop_size,padding_mask=None):
+    def encode(self, audio, sample_rate, padding_mask=None):
 
         if self.units_forced_mode not in ('rfa441to512', 'rfa512to441'):
             if sample_rate == self.encoder_sample_rate:
@@ -171,45 +142,39 @@ class Units_Encoder:
             audio_res = librosa.resample(_audio, orig_sr=sample_rate, target_sr=self.encoder_sample_rate)
             audio_res = torch.from_numpy(audio_res).to(self.device)
 
-        # encode
         if audio_res.size(-1) < 400:
             audio_res = torch.nn.functional.pad(audio, (0, 400 - audio_res.size(-1)))
         units = self.model(audio_res, padding_mask=padding_mask)
 
-        # alignment
-        if self.units_forced_mode == 'left':
-            n_frames = audio.size(-1) // hop_size + 1
-            ratio = (hop_size / sample_rate) / (self.encoder_hop_size / self.encoder_sample_rate)
-            index = torch.clamp(torch.round(ratio * torch.arange(n_frames).to(self.device)).long(), max=units.size(1) - 1)
+        return units
+    
+    def units_forced_alignment(self, units, audio = None, sample_rate = None, hop_size = None, n_frames = None, scale_factor = None, units_forced_mode = 'nearest'):
+        assert (audio is not None and sample_rate is not None and hop_size is not None) or n_frames is not None or scale_factor is not None
+        n_frames = int(audio.size(-1) // hop_size + 1) if n_frames is None else n_frames
+        if units_forced_mode == 'left':
+            assert scale_factor is not None
+            index = torch.clamp(torch.round(scale_factor * torch.arange(n_frames).to(self.device)).long(), max=units.size(1) - 1)
             units_aligned = torch.gather(units, 1, index.unsqueeze(0).unsqueeze(-1).repeat([1, 1, units.size(-1)]))
 
-        elif self.units_forced_mode == 'nearest':
-            n_frames = int(audio.size(-1) // hop_size + 1)
+        elif units_forced_mode in ('rfa441to512', 'rfa512to441'):
             units = units.transpose(1, 2)
-            units_aligned = torch.nn.functional.interpolate(units, size=int(n_frames), mode='nearest')
+            units_aligned = torch.nn.functional.interpolate(units, size=n_frames, scale_factor=scale_factor, mode='nearest')
             units_aligned = units_aligned.transpose(1, 2)
-
-        elif self.units_forced_mode in ('rfa441to512', 'rfa512to441'):
-            n_frames = int(audio.size(-1) // hop_size + 1)
-            units = units.transpose(1, 2)
-            units_aligned = torch.nn.functional.interpolate(units, size=int(n_frames), mode='nearest')
-            units_aligned = units_aligned.transpose(1, 2)
-
         else:
-            raise ValueError(f'Unknow units_forced_mode:{self.units_forced_mode}')
-        return units_aligned
+            units = units.transpose(1, 2)
+            units_aligned = torch.nn.functional.interpolate(units, size=n_frames, scale_factor=scale_factor, mode=units_forced_mode)
+            units_aligned = units_aligned.transpose(1, 2)
 
 class Audio2ContentVec768L12():
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
+    def __init__(self, path='pretrain/contentvec.pt', device='cpu'):
         self.device = device
-        print(' [Encoder Model] Content Vec')
-        print(' [Loading] ' + path)
+        print('ContentVec')
         self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
         self.hubert = self.models[0]
         self.hubert = self.hubert.to(self.device)
         self.hubert.eval()
 
-    def __call__(self, audio, padding_mask=None):  # B, T
+    def __call__(self, audio, padding_mask=None):
         wav_tensor = audio
         feats = wav_tensor.view(1, -1)
         if padding_mask is None:
@@ -220,16 +185,16 @@ class Audio2ContentVec768L12():
         inputs = {
             "source": feats.to(wav_tensor.device),
             "padding_mask": padding_mask.to(wav_tensor.device),
-            "output_layer": 12,  # layer 12
+            "output_layer": 12,
         }
         with torch.no_grad():
             logits = self.hubert.extract_features(**inputs)
             feats = logits[0]
-        units = feats  # .transpose(2, 1)
+        units = feats
         return units
 
 class Audio2HubertLarge1024L24():
-    def __init__(self, path='pretrain/chinese-hubert-large-fairseq-ckpt.pt', h_sample_rate=16000, h_hop_size=320, device='cpu'):
+    def __init__(self, path='pretrain/chinese-hubert-large-fairseq-ckpt.pt', device='cpu'):
         self.device = device
         print('HubertLarge1024L24')
         self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
@@ -238,7 +203,7 @@ class Audio2HubertLarge1024L24():
         self.hubert = self.hubert.float()
         self.hubert.eval()
 
-    def __call__(self, audio, padding_mask=None):  # B, T
+    def __call__(self, audio, padding_mask=None):
         with torch.no_grad():
             if padding_mask is None:
                 padding_mask = torch.BoolTensor(audio.shape).fill_(False)
@@ -248,54 +213,31 @@ class Audio2HubertLarge1024L24():
             inputs = {
                 "source": audio.to(self.device),
                 "padding_mask": padding_mask.to(self.device),
-                "output_layer": 24,  # layer 24
+                "output_layer": 24,
             }
             logits = self.hubert.extract_features(**inputs)
             units = logits[0]
             return units
         
-class WhisperLarge():
-    def __init__(self, path="pretrain/large-v2.pt", device='cpu'):
-        self.device = device
-        print('WhisperLarge')
+class Whisper(torch.nn.Module):
+    def __init__(self, path='pretrain/large-v3.pt', device='cpu'):
+        super().__init__()
+        print('whisper')
         checkpoint = torch.load(path, map_location=device)
         dims = ModelDimensions(**checkpoint["dims"])
         model = Whisper(dims)
         model.load_state_dict(checkpoint["model_state_dict"])
         self.hidden_dim = dims
-        self.model = model.to(self.device)
+        self.model = model.to(device)
         self.model.eval()
 
-    def __call__(self, audio, padding_mask=None):
-        audln = audio.shape[0]
-        ppgln = audln // 320
-        mel = log_mel_spectrogram(audio).to(self.device)
-        print(mel.shape)
-        with torch.no_grad():
-            ppg = self.model.encoder(mel).squeeze().data.cpu().float().numpy()
-            print(ppg.shape)
-            ppg = torch.FloatTensor(ppg[:ppgln, ]).to(self.device)
-            print(ppg.shape)
-            return ppg[None, :, :].transpose(1, 2)
-
-class FunASR(torch.nn.Module):
-    def __init__(self, path='pretrain/funasr/model.pb', device='cpu'):
-        super().__init__()
-        print('FunASR')
-        model_path = path  # Assign the value of path to model_path
-        config_path = model_path.replace('model.pb', 'config.yaml')
-        cmvn_path = model_path.replace('model.pb', 'am.mvn')
-        self.model = SpeechEncoder(config_path, model_path, cmvn_path, device=device)
-
     @torch.inference_mode()
-    def forward(self, audio, padding_mask=None):
+    def forward(self, audio):
         audio = audio.view(1,-1)
-        if padding_mask is None:
-            padding_mask = torch.tensor([audio.shape[-1]]).to(audio.device)
-        else:
-            padding_mask = padding_mask.sum(1)
-        units = self.model(audio, padding_mask)
-        return units
+        mel = log_mel_spectrogram(audio).to(self.dev)
+        with torch.no_grad():
+            units = self.model.encoder(mel.unsqueeze(0)).squeeze().data.cpu().float()
+            return units
 
 class DotDict(dict):
     def __getattr__(*args):

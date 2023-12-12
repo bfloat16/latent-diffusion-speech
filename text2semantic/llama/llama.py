@@ -2,7 +2,6 @@ from transformers import LlamaForCausalLM, LlamaConfig
 import torch
 from torch import nn
 from text.symbols import *
-
 from cluster import get_cluster_model
 
 class Llama(nn.Module):
@@ -24,15 +23,12 @@ class Llama(nn.Module):
             self.SEQ = token_size + 1
             self.EOS = token_size + 2
             token_size += 3
-            # self.tone_emb = nn.Embedding(num_tones, config.hidden_size)
-            # self.phone_emb = nn.Embedding(token_size + 2, config.hidden_size)
         config.vocab_size = token_size
         self.llama = LlamaForCausalLM(config)
         self.quantizer = get_cluster_model(codebook_path)
 
         if self.llama.model.embed_tokens.weight.data.shape[1] == self.quantizer.cluster_centers_.shape[1]:
             self.llama.model.embed_tokens.weight.data[len(symbols) - 1:len(symbols) + semantic_kmeans_num - 1] = torch.from_numpy(self.quantizer.cluster_centers_.copy())
-
 
     def forward(
         self,
@@ -80,22 +76,4 @@ class Llama(nn.Module):
                 return_dict=return_dict,
             )
             
-
         return outputs
-
-if __name__ == '__main__':
-    a = LlamaConfig(
-         hidden_size=768,
-            num_attention_heads=4,
-            num_hidden_layers=4,
-            num_hidden_groups=1,
-            intermediate_size=512,
-    )
-    b = Llama(config=a)
-    phone = torch.LongTensor([[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]])
-    tone = torch.LongTensor([[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]])
-    semantic = torch.LongTensor([[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]])
-    labels = torch.LongTensor([[1,2,3,4,5,6,7,8,9,10,11,1,2,3,4,5,6,7,8,9,10,11,1,2,3,8,9,10,11,-100,-100,-100,-100]])
-    outputs = b(phone=phone, tone=tone, semantic=semantic,labels=labels)
-    print(outputs)
-
