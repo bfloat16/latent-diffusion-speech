@@ -1,4 +1,5 @@
 import numpy as np
+import io
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -6,7 +7,7 @@ import librosa
 from fairseq import checkpoint_utils
 from torchaudio.transforms import Resample
 from torch.optim.lr_scheduler import StepLR
-from encoder.whisper.audio import log_mel_spectrogram
+from encoder.whisper.audio import log_mel_spectrogram, pad_or_trim
 from encoder.whisper.model import ModelDimensions, Whisper
 
 class F0_Extractor:
@@ -24,7 +25,7 @@ class F0_Extractor:
         else:
             self.hop_size_follow_input = False
 
-    def extract(self, audio, silence_front=0, sr=None, mel = None):
+    def extract(self, audio, uv_interp=False, silence_front=0, sr=None, mel = None):
         if sr is not None:
             assert self.hop_size_follow_input
             self.hop_size = self.block_size * sr / self.model_sampling_rate
@@ -60,6 +61,13 @@ class F0_Extractor:
                 [f0[int(min(int(np.round(n * self.hop_size / self.sample_rate / 0.01)), len(f0) - 1))] for n in
                     range(n_frames - start_frame)])
             f0 = np.pad(f0.astype('float'), (start_frame, n_frames - len(f0) - start_frame))
+        
+        if uv_interp:
+            uv = f0 == 0
+            if len(f0[~uv]) > 0:
+                f0[uv] = np.interp(np.where(uv)[0], np.where(~uv)[0], f0[~uv])
+            f0[f0 < self.f0_min] = self.f0_min
+        return f0
 
 class Volume_Extractor:
     def __init__(self, hop_size=512, block_size=None, model_sampling_rate=None):
@@ -93,7 +101,7 @@ class Volume_Extractor:
         return mask
 
 class Units_Encoder:
-    def __init__(self, encoder, encoder_ckpt, encoder_sample_rate=16000, encoder_hop_size=320, device=None, units_forced_mode='nearest'):
+    def __init__(self, encoder, encoder_sample_rate=16000, encoder_hop_size=320, device=None, units_forced_mode='nearest'):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = device
@@ -106,7 +114,7 @@ class Units_Encoder:
             self.model = Audio2ContentVec768L12(device=device)
             is_loaded_encoder = True
         if encoder == 'whisper':
-            self.model = Whisper(encoder_ckpt, device=device)
+            self.model = WhisperLarge(device=device)
             is_loaded_encoder = True
         if encoder == 'hubertlarge1024l24':
             self.model = Audio2HubertLarge1024L24(device=device)
@@ -125,7 +133,6 @@ class Units_Encoder:
         self.encoder_hop_size = encoder_hop_size
 
     def encode(self, audio, sample_rate, padding_mask=None):
-
         if self.units_forced_mode not in ('rfa441to512', 'rfa512to441'):
             if sample_rate == self.encoder_sample_rate:
                 audio_res = audio
@@ -219,11 +226,12 @@ class Audio2HubertLarge1024L24():
             units = logits[0]
             return units
         
-class Whisper(torch.nn.Module):
-    def __init__(self, path='pretrain/large-v3.pt', device='cpu'):
+class WhisperLarge(torch.nn.Module):
+    def __init__(self, device='cuda'):
         super().__init__()
+        self.device = device
         print('whisper')
-        checkpoint = torch.load(path, map_location=device)
+        checkpoint = torch.load('pretrain/large-v3_encoder.pt', map_location="cpu")
         dims = ModelDimensions(**checkpoint["dims"])
         model = Whisper(dims)
         model.load_state_dict(checkpoint["model_state_dict"])
@@ -232,11 +240,12 @@ class Whisper(torch.nn.Module):
         self.model.eval()
 
     @torch.inference_mode()
-    def forward(self, audio):
+    def __call__(self, audio, padding_mask=None):
         audio = audio.view(1,-1)
-        mel = log_mel_spectrogram(audio).to(self.dev)
+        #   audio = pad_or_trim(audio)
+        mel = log_mel_spectrogram(audio).to(self.device)
         with torch.no_grad():
-            units = self.model.encoder(mel.unsqueeze(0)).squeeze().data.cpu().float()
+            units = self.model.encoder(mel).squeeze().data.cpu().float()
             return units
 
 class DotDict(dict):
@@ -247,7 +256,6 @@ class DotDict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-
 def masked_avg_pool_1d(x, kernel_size):
     x = x.unsqueeze(1)
     x = F.pad(x, ((kernel_size - 1) // 2, kernel_size // 2), mode="reflect")
@@ -257,13 +265,7 @@ def masked_avg_pool_1d(x, kernel_size):
 
     sum_pooled = F.conv1d(masked_x, ones_kernel, stride=1, padding=0, groups=x.size(1))
 
-    valid_count = F.conv1d(
-        mask.float(),
-        ones_kernel,
-        stride=1,
-        padding=0,
-        groups=x.size(1),
-    )
+    valid_count = F.conv1d(mask.float(), ones_kernel, stride=1, padding=0, groups=x.size(1))
     valid_count = valid_count.clamp(min=1)
 
     avg_pooled = sum_pooled / valid_count

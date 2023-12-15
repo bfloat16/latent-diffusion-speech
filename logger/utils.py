@@ -3,47 +3,6 @@ import yaml
 import json
 import torch
 
-
-def traverse_dir(
-        root_dir,
-        extensions,
-        amount=None,
-        str_include=None,
-        str_exclude=None,
-        is_pure=False,
-        is_sort=False,
-        is_ext=True):
-    file_list = []
-    cnt = 0
-    for root, _, files in os.walk(root_dir):
-        for file in files:
-            if any([file.endswith(f".{ext}") for ext in extensions]):
-                # path
-                mix_path = os.path.join(root, file)
-                pure_path = mix_path[len(root_dir) + 1:] if is_pure else mix_path
-
-                # amount
-                if (amount is not None) and (cnt == amount):
-                    if is_sort:
-                        file_list.sort()
-                    return file_list
-
-                # check string
-                if (str_include is not None) and (str_include not in pure_path):
-                    continue
-                if (str_exclude is not None) and (str_exclude in pure_path):
-                    continue
-
-                if not is_ext:
-                    ext = pure_path.split('.')[-1]
-                    pure_path = pure_path[:-(len(ext) + 1)]
-                file_list.append(pure_path)
-                cnt += 1
-    if is_sort:
-        file_list.sort()
-    return file_list
-
-
 class DotDict(dict):
     def __getattr__(*args):
         val = dict.get(*args)
@@ -51,7 +10,6 @@ class DotDict(dict):
 
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
-
 
 def get_network_paras_amount(model_dict):
     info = dict()
@@ -62,14 +20,12 @@ def get_network_paras_amount(model_dict):
         info[model_name] = trainable_params
     return info
 
-
 def load_config(path_config):
     with open(path_config, "r") as config:
         args = yaml.safe_load(config)
     args = DotDict(args)
     # print(args)
     return args
-
 
 def to_json(path_params, path_json):
     params = torch.load(path_params, map_location=torch.device('cpu'))
@@ -81,7 +37,6 @@ def to_json(path_params, path_json):
     with open(path_json, 'w') as outfile:
         json.dump(raw_state_dict, outfile, indent="\t")
 
-
 def convert_tensor_to_numpy(tensor, is_squeeze=True):
     if is_squeeze:
         tensor = tensor.squeeze()
@@ -90,7 +45,6 @@ def convert_tensor_to_numpy(tensor, is_squeeze=True):
     if tensor.is_cuda:
         tensor = tensor.cpu()
     return tensor.numpy()
-
 
 def load_model(
         expdir,

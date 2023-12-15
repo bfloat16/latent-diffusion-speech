@@ -20,11 +20,11 @@ rich_progress = Progress(
     transient=True
     )
 
-def preprocess(path, extensions=['wav']):
+def preprocess(path):
     path_srcdir = os.path.join(path, 'audio')
     path_uttdir = os.path.join(path, 'utt')
         
-    filelist = traverse_dir(path_srcdir, extensions=extensions, is_pure=True, is_sort=True, is_ext=True)
+    filelist = traverse_dir(path_srcdir, is_pure=True, is_sort=True, is_ext=True)
     main = rich_progress.add_task("Preprocess", total=len(filelist))
 
     with rich_progress:

@@ -5,15 +5,27 @@ import torch.multiprocessing as mp
 import argparse
 from logger import utils
 import os
-from logger.utils import traverse_dir
-from tqdm import tqdm
+from glob import glob
+from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
+
+rich_progress = Progress(
+    TextColumn("Preprocess:"),
+    BarColumn(bar_width=80), "[progress.percentage]{task.percentage:>3.1f}%",
+    "•",
+    MofNCompleteColumn(),
+    "•",
+    TimeElapsedColumn(),
+    "|",
+    TimeRemainingColumn(),
+    transient=True
+    )
 
 @torch.no_grad()
 def preprocess_utterance(rank, units_path, model,in_dir, out_dir, num_workers, units_quantize_type = "kmeans"):
     units_path = units_path[rank::num_workers]
     if units_quantize_type == "vq":
         model = model.to(f"cuda:{rank%num_workers}")
-    for unit_path in tqdm(units_path,position=rank):
+    for unit_path in units_path:
         if units_quantize_type == "kmeans":
             unit = np.load(os.path.join(in_dir, "units" , unit_path))
             token = cluster.get_cluster_result(model, unit)
@@ -32,29 +44,14 @@ def preprocess(in_dir, units_quantize_type, model, num_workers=1):
     out_dir = os.path.join(in_dir, "semantic_token")
     os.makedirs(out_dir, exist_ok=True)
     units_dir = os.path.join(in_dir, "units")
-    filelist = traverse_dir(
-        units_dir,
-        extensions=["npy"],
-        is_pure=True,
-        is_sort=True,
-        is_ext=True)
+    filelist = glob(f"{units_dir}/**/*.npy", recursive=True)
     
     mp.spawn(preprocess_utterance, args=(filelist, model,in_dir, out_dir, num_workers, units_quantize_type), nprocs=num_workers, join=True)
     
 def parse_args(args=None, namespace=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-c",
-        "--config",
-        type=str,
-        default='configs/config.yaml',
-        help="path to the config file")
-    parser.add_argument(
-        "-n",
-        "--num_workers",
-        type=int,
-        default= 10,
-        help="num workers")
+    parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
+    parser.add_argument("-n", "--num_workers", type=int, default= 10)
     return parser.parse_args(args=args, namespace=namespace)
 
 if __name__ == "__main__":

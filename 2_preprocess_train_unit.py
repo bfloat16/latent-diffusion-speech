@@ -8,8 +8,6 @@ from logger import utils
 from glob import glob
 from tools.tools import Units_Encoder
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
-import warnings
-warnings.filterwarnings("ignore")
 
 rich_progress = Progress(
     TextColumn("Preprocess:"),
@@ -20,6 +18,8 @@ rich_progress = Progress(
     TimeElapsedColumn(),
     "|",
     TimeRemainingColumn(),
+    "•",
+    TextColumn("[progress.description]{task.description}"),
     transient=True
     )
 
@@ -41,12 +41,12 @@ def preprocess(path, sample_rate, hop_size, encoder, encoder_sample_rate, encode
 
             os.makedirs(os.path.dirname(path_unitsfile), exist_ok=True)
             np.save(path_unitsfile, units)
-            rich_progress.update(rank, advance=1)
+            rich_progress.update(rank, advance=1, description=f"audio={file}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_processes", type=int, default=8)
+    parser.add_argument("-n", "--num_processes", type=int, default=1)
     cmd = parser.parse_args()
     args = utils.load_config(cmd.config)
     
@@ -60,6 +60,8 @@ if __name__ == '__main__':
     units_forced_mode = args.data.units_forced_mode
 
     filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
+    preprocess(filelist, sample_rate, hop_size, encoder, encoder_sample_rate, encoder_hop_size, units_forced_mode)
+    '''
     with ProcessPoolExecutor(max_workers=num_processes) as executor:
         tasks = []
         for i in range(num_processes):
@@ -69,3 +71,4 @@ if __name__ == '__main__':
             tasks.append(executor.submit(preprocess, file_chunk, sample_rate, hop_size, encoder, encoder_sample_rate, encoder_hop_size, units_forced_mode))
         for task in tasks:
             task.result()
+    '''

@@ -1,7 +1,3 @@
-'''
-author: wayn391@mastertones
-'''
-
 import os
 import time
 import yaml
@@ -21,58 +17,16 @@ class Saver(object):
 
         self.expdir = args.model.text2semantic.train.expdir
         self.sample_rate = args.data.sampling_rate
-
-        # cold start
         self.global_step = initial_global_step
         self.init_time = time.time()
         self.last_time = time.time()
-        # makedirs
         os.makedirs(self.expdir, exist_ok=True)
 
-        # path
-        self.path_log_info = os.path.join(self.expdir, 'log_info.txt')
-
-        # ckpt
-        os.makedirs(self.expdir, exist_ok=True)
-
-        # writer
         self.writer = SummaryWriter(os.path.join(self.expdir, 'logs'))
 
-        # save config
         path_config = os.path.join(self.expdir, 'config.yaml')
         with open(path_config, "w") as out_config:
             yaml.dump(dict(args), out_config)
-
-        # save spk_emb_dict
-        if args.model.use_speaker_encoder:
-            import numpy as np
-            path_from_spk_emb_dict = os.path.join(args.data.train_path, 'spk_emb_dict.npy')
-            path_save_spk_emb_dict = os.path.join(self.expdir, 'spk_emb_dict.npy')
-            temp_spk_emb_dict = np.load(path_from_spk_emb_dict, allow_pickle=True).item()
-            np.save(path_save_spk_emb_dict, temp_spk_emb_dict)
-
-    def log_info(self, msg):
-        '''log method'''
-        if isinstance(msg, dict):
-            msg_list = []
-            for k, v in msg.items():
-                tmp_str = ''
-                if isinstance(v, int):
-                    tmp_str = '{}: {:,}'.format(k, v)
-                else:
-                    tmp_str = '{}: {}'.format(k, v)
-
-                msg_list.append(tmp_str)
-            msg_str = '\n'.join(msg_list)
-        else:
-            msg_str = msg
-
-        # dsplay
-        print(msg_str)
-
-        # save
-        with open(self.path_log_info, 'a') as fp:
-            fp.write(msg_str + '\n')
 
     def log_value(self, dict):
         for k, v in dict.items():

@@ -30,7 +30,7 @@ def parse_args(args=None, namespace=None):
     return parser.parse_args(args=args, namespace=namespace)
 
 
-def preprocess(path, f0_extractor, volume_extractor, mel_extractor, units_encoder, sample_rate, hop_size, device='cuda', use_pitch_aug=False, extensions=['wav'], is_tts = False):
+def preprocess(path, f0_extractor, volume_extractor, mel_extractor, units_encoder, sample_rate, hop_size, device='cuda', use_pitch_aug=False, is_tts = False):
     path_srcdir = os.path.join(path, 'audio')
     path_unitsdir = os.path.join(path, 'units')
     path_f0dir = os.path.join(path, 'f0')
@@ -42,7 +42,7 @@ def preprocess(path, f0_extractor, volume_extractor, mel_extractor, units_encode
     if is_tts:
         path_uttdir = os.path.join(path, 'utt')
 
-    filelist = traverse_dir(path_srcdir, extensions=extensions, is_pure=True, is_sort=True, is_ext=True)
+    filelist = traverse_dir(path_srcdir, is_pure=True, is_sort=True, is_ext=True)
 
     pitch_aug_dict = {}
 

@@ -7,7 +7,6 @@ from diffusion.unit2mel import load_model_vocoder
 from tools.slicer import split
 from tools.tools import F0_Extractor, Volume_Extractor, Units_Encoder, cross_fade
 
-
 class DiffusionSVC:
     def __init__(self, device=None):
         if device is not None:
@@ -43,7 +42,6 @@ class DiffusionSVC:
             self.args.data.encoder_ckpt,
             self.args.data.encoder_sample_rate,
             self.args.data.encoder_hop_size,
-            cnhubertsoft_gate=self.args.data.cnhubertsoft_gate,
             device=self.device,
             units_forced_mode=self.args.data.units_forced_mode
         )
@@ -55,29 +53,6 @@ class DiffusionSVC:
         )
 
         self.load_f0_extractor(f0_model=f0_model, f0_min=f0_min, f0_max=f0_max)
-
-    def flush(self, model_path=None, f0_model=None, f0_min=None, f0_max=None, naive_model_path=None):
-        assert (model_path is not None) or (naive_model_path is not None)
-        # flush model if changed
-        if ((self.model_path != model_path) or (self.f0_model != f0_model)
-                or (self.f0_min != f0_min) or (self.f0_max != f0_max)):
-            self.load_model(model_path, f0_model=f0_model, f0_min=f0_min, f0_max=f0_max)
-        if (self.naive_model_path != naive_model_path) and (naive_model_path is not None):
-            self.load_naive_model(naive_model_path)
-        # check args if use naive
-        if self.naive_model is not None:
-            if self.naive_model_args.data.encoder != self.args.data.encoder:
-                raise ValueError("encoder of Naive Model and Diffusion Model are different")
-            if self.naive_model_args.model.n_spk != self.args.model.n_spk:
-                raise ValueError("n_spk of Naive Model and Diffusion Model are different")
-            if bool(self.naive_model_args.model.use_speaker_encoder) != bool(self.args.model.use_speaker_encoder):
-                raise ValueError("use_speaker_encoder of Naive Model and Diffusion Model are different")
-            if self.naive_model_args.vocoder.type != self.args.vocoder.type:
-                raise ValueError("vocoder of Naive Model and Diffusion Model are different")
-            if self.naive_model_args.data.block_size != self.args.data.block_size:
-                raise ValueError("block_size of Naive Model and Diffusion Model are different")
-            if self.naive_model_args.data.sampling_rate != self.args.data.sampling_rate:
-                raise ValueError("sampling_rate of Naive Model and Diffusion Model are different")
 
     def flush_f0_extractor(self, f0_model, f0_min=None, f0_max=None):
         if (f0_model != self.f0_model) and (f0_model is not None):
@@ -165,9 +140,7 @@ class DiffusionSVC:
         else:
             spk_id = torch.LongTensor(np.array([[int(spk_id)]])).to(self.device)
 
-        return self.model(units, f0, volume, spk_id=spk_id, spk_mix_dict=spk_mix_dict, aug_shift=aug_shift,
-                          gt_spec=gt_spec, infer=True, infer_speedup=infer_speedup, method=method, k_step=k_step,
-                          use_tqdm=use_tqdm, spk_emb=spk_emb, spk_emb_dict=spk_emb_dict)
+        return self.model(units, f0, volume, spk_id=spk_id, spk_mix_dict=spk_mix_dict, aug_shift=aug_shift, gt_spec=gt_spec, infer=True, infer_speedup=infer_speedup, method=method, k_step=k_step, use_tqdm=use_tqdm, spk_emb=spk_emb, spk_emb_dict=spk_emb_dict)
 
     @torch.no_grad()  # 比__call__多了声码器代码，输出波形
     def infer(self, units, f0, volume, gt_spec=None, spk_id=1, spk_mix_dict=None, aug_shift=0,

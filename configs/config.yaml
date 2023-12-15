@@ -3,7 +3,7 @@ data:
   f0_max: 1200
   sampling_rate: 44100
   block_size: 512 # Equal to hop_length
-  duration: 2
+  duration: 1
   encoder: 'whisper'
   encoder_sample_rate: 16000
   encoder_hop_size: 320

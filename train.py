@@ -9,6 +9,7 @@ import accelerate
 import itertools
 from tools.tools import StepLRWithWarmUp
 from rich.console import Console
+from vector_quantize_pytorch import VectorQuantize
 
 def parse_args(args=None, namespace=None):
     parser = argparse.ArgumentParser()
@@ -38,7 +39,6 @@ if __name__ == '__main__':
                 args.model.block_out_channels,
                 args.model.n_heads,
                 args.model.n_hidden,
-                use_speaker_encoder=args.model.use_speaker_encoder,
                 speaker_encoder_out_channels=args.data.speaker_encoder_out_channels,
                 is_tts=args.model.is_tts
                 )
@@ -50,7 +50,6 @@ if __name__ == '__main__':
             codebook_weight = get_cluster_model(args.model.text2semantic.codebook_path).__dict__["cluster_centers_"]
             quantizer = EuclideanCodebook(codebook_weight).to(device)
         elif args.train.units_quantize_type == "vq":
-            from vector_quantize_pytorch import VectorQuantize
             quantizer = VectorQuantize(
                 dim = args.data.encoder_out_channels,
                 codebook_size = args.model.text2semantic.semantic_kmeans_num,

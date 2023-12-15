@@ -15,9 +15,9 @@ def parse_args(args=None, namespace=None):
         help="path to the config file")
     return parser.parse_args(args=args, namespace=namespace)
 
-def preprocess(path, extensions=['wav']):
+def preprocess(path):
     path_srcdir = os.path.join(path, 'audio')
-    filelist = traverse_dir(path_srcdir, extensions=extensions, is_pure=True, is_sort=True, is_ext=True)
+    filelist = traverse_dir(path_srcdir, is_pure=True, is_sort=True, is_ext=True)
 
     pitch_aug_dict = {}
 
