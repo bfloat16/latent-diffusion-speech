@@ -11,6 +11,7 @@ from cluster import get_cluster_model
 import soundfile as sf
 import numpy as np
 from vector_quantize_pytorch import VectorQuantize
+from tools.tools import get_encdoer_out_channels
 
 def parse_args(args=None, namespace=None):
     parser = argparse.ArgumentParser()
@@ -90,7 +91,7 @@ if __name__ == '__main__':
             args = yaml.safe_load(config)
         args = DotDict(args)
 
-        if args.train.units_quantize_type == "kmeans":
+        if args['text2semantic']['train']['units_quantize_type'] == "kmeans":
             codebook = get_cluster_model(args.model.text2semantic.codebook_path)
             codebook = codebook.__dict__["cluster_centers_"]
             
@@ -101,9 +102,9 @@ if __name__ == '__main__':
                 )
             semantic_embedding.weight.data = torch.from_numpy(codebook)
             semantic_embedding.to(device)
-        elif args.train.units_quantize_type == "vq":
+        elif args['text2semantic']['train']['units_quantize_type'] == "vq":
             semantic_embedding = VectorQuantize(
-                    dim = args.data.encoder_out_channels,
+                    dim = get_encdoer_out_channels(args['data']['encoder']),
                     codebook_size = args.model.text2semantic.semantic_kmeans_num,
                     decay = 0.8,             
                     commitment_weight = 1.,
@@ -113,7 +114,7 @@ if __name__ == '__main__':
             semantic_embedding.load_state_dict(model_para["model"])
             semantic_embedding = semantic_embedding.to(device)
         else:
-            raise ValueError(' [x] Unknown quantize_type: ' + args.train.units_quantize_type)
+            raise ValueError(' [x] Unknown quantize_type: ' + args['text2semantic']['train']['units_quantize_type'])
 
         lm = get_language_model(**args.model.text2semantic).to(device)
         lm.load_state_dict(torch.load(cmd.language_model, map_location=torch.device(device))["model"])
@@ -151,12 +152,12 @@ if __name__ == '__main__':
         else:
             semantic_token = semantic_token[:,1:]
 
-        if args.train.units_quantize_type == "kmeans":
+        if args['text2semantic']['train']['units_quantize_type'] == "kmeans":
             semantic_emb = semantic_embedding(semantic_token)
-        elif args.train.units_quantize_type == "vq":
+        elif args['text2semantic']['train']['units_quantize_type'] == "vq":
             semantic_emb = semantic_embedding.get_codes_from_indices(semantic_token)
-            semantic_emb = units_forced_alignment(semantic_emb, scale_factor=(diffusion_svc.args.data.sampling_rate/diffusion_svc.args.data.block_size)/(diffusion_svc.args.data.encoder_sample_rate/args.data.encoder_hop_size), units_forced_mode=diffusion_svc.args.data.units_forced_mode)
+            semantic_emb = units_forced_alignment(semantic_emb, scale_factor=(diffusion_svc.args['data']['sampling_rate']/diffusion_svc.args['data']['block_size'])/(diffusion_svc.args.data.encoder_sample_rate/args.data.encoder_hop_size))
 
         wav = diffusion_svc.infer(semantic_emb,f0=None,volume=None, spk_id = spk_id, infer_speedup=speedup, method=method)
         
-        sf.write(cmd.output, wav.detach().cpu().numpy()[0,0], diffusion_svc.args.data.sampling_rate)
+        sf.write(cmd.output, wav.detach().cpu().numpy()[0,0], diffusion_svc.args['data']['sampling_rate'])

@@ -21,7 +21,7 @@ def train_cluster(dataset, n_clusters, use_minibatch=True, verbose=False,use_gpu
 
     for path in tqdm(selected_filenames):
         not_processed_feature = np.load(path)
-        if not_processed_feature.shape[1] != 512    :
+        if not_processed_feature.shape[1] != 1280:
             print(path)
         not_processed_feature = not_processed_feature.astype(np.float32)
         save_path = os.path.join(tempset, os.path.basename(path)) 
@@ -45,9 +45,9 @@ def train_cluster(dataset, n_clusters, use_minibatch=True, verbose=False,use_gpu
         kmeans.fit_predict(features)
 
     x = {
-            "n_features_in_": kmeans.n_features_in_ if use_gpu is False else features.shape[1],
-            "_n_threads": kmeans._n_threads if use_gpu is False else 4,
-            "cluster_centers_": kmeans.cluster_centers_ if use_gpu is False else kmeans.centroids.cpu().numpy()
+        "n_features_in_": kmeans.n_features_in_ if use_gpu is False else features.shape[1],
+        "_n_threads": kmeans._n_threads if use_gpu is False else 4,
+        "cluster_centers_": kmeans.cluster_centers_ if use_gpu is False else kmeans.centroids.cpu().numpy()
     }
     print("End KMeans")
     return x
@@ -62,9 +62,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    global tempset
     checkpoint_dir = args.output
     dataset = args.dataset
-    global tempset
     tempset = args.tempset
     use_gpu = args.gpu
     n_clusters = args.n_clusters

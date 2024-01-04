@@ -4,16 +4,13 @@ import re
 import cn2an
 from pypinyin import lazy_pinyin, Style
 
-from text import symbols
 from text.symbols import punctuation
 from text.tone_sandhi import ToneSandhi
 
 current_file_path = os.path.dirname(__file__)
-pinyin_to_symbol_map = {line.split("\t")[0]: line.strip().split("\t")[1] for line in
-                        open(os.path.join(current_file_path, 'opencpop-strict.txt')).readlines()}
+pinyin_to_symbol_map = {line.split("\t")[0]: line.strip().split("\t")[1] for line in open(os.path.join(current_file_path, 'opencpop-strict.txt')).readlines()}
 
 import jieba.posseg as psg
-
 
 rep_map = {
     '：': ',',
@@ -46,7 +43,6 @@ rep_map = {
     '~': "-",
     '「': "'",
     '」': "'",
-
 }
 
 tone_modifier = ToneSandhi()
@@ -54,11 +50,8 @@ tone_modifier = ToneSandhi()
 def replace_punctuation(text):
     text = text.replace("嗯", "恩").replace("呣","母")
     pattern = re.compile('|'.join(re.escape(p) for p in rep_map.keys()))
-
     replaced_text = pattern.sub(lambda x: rep_map[x.group()], text)
-
     replaced_text = re.sub(r'[^\u4e00-\u9fa5'+"".join(punctuation)+r']+', '', replaced_text)
-
     return replaced_text
 
 def g2p(text):
@@ -68,11 +61,7 @@ def g2p(text):
     assert sum(word2ph) == len(phones)
     if len(word2ph) != len(text):
         print(text, phones, tones, word2ph)
-    # phones = ['_'] + phones + ["_"]
-    # tones = [0] + tones + [0]
-    # word2ph = [1] + word2ph + [1]
     return phones, tones, word2ph
-
 
 def _get_initials_finals(word):
     initials = []
@@ -86,14 +75,11 @@ def _get_initials_finals(word):
         finals.append(v)
     return initials, finals
 
-
 def _g2p(segments):
     phones_list = []
     tones_list = []
     word2ph = []
     for seg in segments:
-        pinyins = []
-        # Replace all English words in the sentence
         seg = re.sub('[a-zA-Z]+', '', seg)
         seg_cut = psg.lcut(seg)
         initials = []
@@ -103,19 +89,13 @@ def _g2p(segments):
             if pos == 'eng':
                 continue
             sub_initials, sub_finals = _get_initials_finals(word)
-            sub_finals = tone_modifier.modified_tone(word, pos,
-                                                          sub_finals)
+            sub_finals = tone_modifier.modified_tone(word, pos, sub_finals)
             initials.append(sub_initials)
             finals.append(sub_finals)
-
-            # assert len(sub_initials) == len(sub_finals) == len(word)
         initials = sum(initials, [])
         finals = sum(finals, [])
-        #
         for c, v in zip(initials, finals):
             raw_pinyin = c+v
-            # NOTE: post process for pypinyin outputs
-            # we discriminate i, ii and iii
             if c == v:
                 assert c in punctuation
                 phone = [c]
@@ -124,7 +104,6 @@ def _g2p(segments):
             else:
                 v_without_tone = v[:-1]
                 tone = v[-1]
-
                 pinyin = c+v_without_tone
                 assert tone in '12345'
 
@@ -165,8 +144,6 @@ def _g2p(segments):
             tones_list += [int(tone)] * len(phone)
     return phones_list, tones_list, word2ph
 
-
-
 def text_normalize(text):
     numbers = re.findall(r'\d+(?:\.?\d+)?', text)
     for number in numbers:
@@ -177,19 +154,3 @@ def text_normalize(text):
 def get_bert_feature(text, word2ph):
     from  text import chinese_bert
     return chinese_bert.get_bert_feature(text, word2ph)
-
-if __name__ == '__main__':
-    # from text.chinese_bert import get_bert_feature
-    text = "啊！但是《原神》是由,米哈\游自主，  [研发]的一款全.新开放世界.冒险游戏"
-    text = text_normalize(text)
-    print(text)
-    phones, tones, word2ph = g2p(text)
-    # bert = get_bert_feature(text, word2ph)
-    from text import cleaned_text_to_sequence
-    print(cleaned_text_to_sequence(phones, tones, "ZH"))
-    print(phones, tones, word2ph, len(phones), len(tones), len(word2ph),len(text))
-
-
-# # 示例用法
-# text = "这是一个示例文本：,你好！这是一个测试...."
-# print(g2p_paddle(text))  # 输出: 这是一个示例文本你好这是一个测试

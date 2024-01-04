@@ -1,9 +1,5 @@
-# modified from https://github.com/CjangCjengh/vits/blob/main/text/japanese.py
 import re
-import sys
-
 import pyopenjtalk
-
 from text import symbols
 
 # Regular expression matching Japanese without punctuation marks:
@@ -18,7 +14,6 @@ _japanese_marks = re.compile(
 _symbols_to_japanese = [(re.compile('%s' % x[0]), x[1]) for x in [
     ('％', 'パーセント')
 ]]
-
 
 # List of (consonant, sokuon) pairs:
 _real_sokuon = [(re.compile('%s' % x[0]), x[1]) for x in [
@@ -35,8 +30,6 @@ _real_hatsuon = [(re.compile('%s' % x[0]), x[1]) for x in [
     (r'N([↑↓]*[tdn])', r'n\1'),
     (r'N([↑↓]*[kg])', r'ŋ\1')
 ]]
-
-
 
 def post_replace_ph(ph):
     rep_map = {
@@ -65,9 +58,7 @@ def symbols_to_japanese(text):
         text = re.sub(regex, replacement, text)
     return text
 
-
 def preprocess_jap(text):
-    '''Reference https://r9y9.github.io/ttslearn/latest/notebooks/ch10_Recipe-Tacotron.html'''
     text = symbols_to_japanese(text)
     sentences = re.split(_japanese_marks, text)
     marks = re.findall(_japanese_marks, text)
@@ -81,10 +72,6 @@ def preprocess_jap(text):
             text += [marks[i].replace(' ', '')]
     return text
 
-def text_normalize(text):
-    # todo: jap text normalize
-    return text
-
 def g2p(norm_text):
     phones = preprocess_jap(norm_text)
     phones = [post_replace_ph(i) for i in phones]
@@ -93,12 +80,5 @@ def g2p(norm_text):
     word2ph = [1 for i in phones]
     return phones, tones, word2ph
 
-
-if __name__ == '__main__':
-    for line in open("../../../Downloads/transcript_utf8.txt").readlines():
-        text = line.split(":")[1]
-        phones, tones, word2ph = g2p(text)
-        for p in phones:
-            if p == "z":
-                print(text, phones)
-                sys.exit(0)
+def text_normalize(text):
+    return text

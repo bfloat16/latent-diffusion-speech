@@ -1,13 +1,11 @@
 import numpy as np
-import io
 import torch
-import torch.nn.functional as F
-import torch.nn as nn
 import librosa
+import torch.nn as nn
 from fairseq import checkpoint_utils
 from torchaudio.transforms import Resample
 from torch.optim.lr_scheduler import StepLR
-from encoder.whisper.audio import log_mel_spectrogram, pad_or_trim
+from encoder.whisper.audio import log_mel_spectrogram
 from encoder.whisper.model import ModelDimensions, Whisper
 
 class F0_Extractor:
@@ -25,7 +23,7 @@ class F0_Extractor:
         else:
             self.hop_size_follow_input = False
 
-    def extract(self, audio, uv_interp=False, silence_front=0, sr=None, mel = None):
+    def extract(self, audio, uv_interp=False, silence_front=0, sr=None, mel=None):
         if sr is not None:
             assert self.hop_size_follow_input
             self.hop_size = self.block_size * sr / self.model_sampling_rate
@@ -101,32 +99,23 @@ class Volume_Extractor:
         return mask
 
 class Units_Encoder:
-    def __init__(self, encoder, encoder_sample_rate=16000, encoder_hop_size=320, device=None, units_forced_mode='nearest'):
+    def __init__(self, encoder, encoder_sample_rate=16000, encoder_hop_size=320, device=None):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = device
-        if units_forced_mode is None:
-            units_forced_mode = 'left'
-        self.units_forced_mode = units_forced_mode
 
         is_loaded_encoder = False
         if encoder == 'contentvec768l12':
             self.model = Audio2ContentVec768L12(device=device)
             is_loaded_encoder = True
-        if encoder == 'whisper':
-            self.model = WhisperLarge(device=device)
+        if encoder == 'whisper_large_v3':
+            self.model = WhisperLargeV3(device=device)
             is_loaded_encoder = True
         if encoder == 'hubertlarge1024l24':
             self.model = Audio2HubertLarge1024L24(device=device)
             is_loaded_encoder = True
         if not is_loaded_encoder:
             raise ValueError(f"[x] Unknown units encoder: {encoder}")
-        print(f"Units Forced Mode:{self.units_forced_mode}")
-
-        if self.units_forced_mode == 'rfa512to441':
-            encoder_sample_rate = encoder_sample_rate * 441 / 512
-        if self.units_forced_mode == 'rfa441to512':
-            encoder_sample_rate = encoder_sample_rate * 512 / 441
 
         self.resample_kernel = {}
         self.encoder_sample_rate = encoder_sample_rate
@@ -154,23 +143,6 @@ class Units_Encoder:
         units = self.model(audio_res, padding_mask=padding_mask)
 
         return units
-    
-    def units_forced_alignment(self, units, audio = None, sample_rate = None, hop_size = None, n_frames = None, scale_factor = None, units_forced_mode = 'nearest'):
-        assert (audio is not None and sample_rate is not None and hop_size is not None) or n_frames is not None or scale_factor is not None
-        n_frames = int(audio.size(-1) // hop_size + 1) if n_frames is None else n_frames
-        if units_forced_mode == 'left':
-            assert scale_factor is not None
-            index = torch.clamp(torch.round(scale_factor * torch.arange(n_frames).to(self.device)).long(), max=units.size(1) - 1)
-            units_aligned = torch.gather(units, 1, index.unsqueeze(0).unsqueeze(-1).repeat([1, 1, units.size(-1)]))
-
-        elif units_forced_mode in ('rfa441to512', 'rfa512to441'):
-            units = units.transpose(1, 2)
-            units_aligned = torch.nn.functional.interpolate(units, size=n_frames, scale_factor=scale_factor, mode='nearest')
-            units_aligned = units_aligned.transpose(1, 2)
-        else:
-            units = units.transpose(1, 2)
-            units_aligned = torch.nn.functional.interpolate(units, size=n_frames, scale_factor=scale_factor, mode=units_forced_mode)
-            units_aligned = units_aligned.transpose(1, 2)
 
 class Audio2ContentVec768L12():
     def __init__(self, path='pretrain/contentvec.pt', device='cpu'):
@@ -226,11 +198,11 @@ class Audio2HubertLarge1024L24():
             units = logits[0]
             return units
         
-class WhisperLarge(torch.nn.Module):
+class WhisperLargeV3(torch.nn.Module):
     def __init__(self, device='cuda'):
         super().__init__()
         self.device = device
-        print('whisper')
+        print('whisper_large_v3')
         checkpoint = torch.load('pretrain/large-v3_encoder.pt', map_location="cpu")
         dims = ModelDimensions(**checkpoint["dims"])
         model = Whisper(dims)
@@ -242,11 +214,30 @@ class WhisperLarge(torch.nn.Module):
     @torch.inference_mode()
     def __call__(self, audio, padding_mask=None):
         audio = audio.view(1,-1)
-        #   audio = pad_or_trim(audio)
         mel = log_mel_spectrogram(audio).to(self.device)
         with torch.no_grad():
             units = self.model.encoder(mel).squeeze().data.cpu().float()
             return units
+        
+class StepLRWithWarmUp(StepLR):
+    def __init__(self, optimizer, step_size, gamma=0.1, last_epoch=-1, warm_up_steps=1000, start_lr = 1e-6, verbose=False):
+        self.warm_up_steps = warm_up_steps
+        self.start_lr = start_lr
+        super().__init__(optimizer,step_size, gamma, last_epoch, verbose)
+
+    def get_lr(self):
+        if self.last_epoch < self.warm_up_steps:
+            return [self.start_lr + (base_lr - self.start_lr) * self.last_epoch / self.warm_up_steps
+                    for base_lr in self.base_lrs]
+        else:
+            return super().get_lr()
+
+    def _get_closed_form_lr(self):
+        if self.last_epoch < self.warm_up_steps:
+            return [self.start_lr + (base_lr - self.start_lr) * self.last_epoch / self.warm_up_steps
+                    for base_lr in self.base_lrs]
+        else:
+            return super()._get_closed_form_lr()
 
 class DotDict(dict):
     def __getattr__(*args):
@@ -256,29 +247,37 @@ class DotDict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-def masked_avg_pool_1d(x, kernel_size):
-    x = x.unsqueeze(1)
-    x = F.pad(x, ((kernel_size - 1) // 2, kernel_size // 2), mode="reflect")
-    mask = ~torch.isnan(x)
-    masked_x = torch.where(mask, x, torch.zeros_like(x))
-    ones_kernel = torch.ones(x.size(1), 1, kernel_size, device=x.device)
+def units_forced_alignment(units, audio=None, sample_rate=None, hop_size=None, n_frames=None, scale_factor=None, units_forced_mode='nearest', device='cpu'):
+    assert (audio is not None and sample_rate is not None and hop_size is not None) or n_frames is not None or scale_factor is not None
+    n_frames = int(audio.size(-1) // hop_size + 1) if n_frames is None else n_frames
+    unit_is_tensor = True
+    units_dim = len(units.shape)
+    if isinstance(units, np.ndarray):
+        units = torch.from_numpy(units) 
+        unit_is_tensor = False
+    if units_dim == 2:
+        units = units.unsqueeze(0)
 
-    sum_pooled = F.conv1d(masked_x, ones_kernel, stride=1, padding=0, groups=x.size(1))
+    if units_forced_mode == 'left':
+        assert scale_factor is not None
+        index = torch.clamp(torch.round(scale_factor * torch.arange(n_frames).to(device)).long(), max=units.size(1) - 1)
+        units_aligned = torch.gather(units, 1, index.unsqueeze(0).unsqueeze(-1).repeat([1, 1, units.size(-1)]))
 
-    valid_count = F.conv1d(mask.float(), ones_kernel, stride=1, padding=0, groups=x.size(1))
-    valid_count = valid_count.clamp(min=1)
+    elif units_forced_mode in ('rfa441to512', 'rfa512to441'):
+        units = units.transpose(1, 2)
+        units_aligned = torch.nn.functional.interpolate(units, size=n_frames, scale_factor=scale_factor, mode='nearest')
+        units_aligned = units_aligned.transpose(-1, -2)
 
-    avg_pooled = sum_pooled / valid_count
-
-    return avg_pooled.squeeze(1)
-
-def median_pool_1d(x, kernel_size):
-    x = x.unsqueeze(1)
-    x = F.pad(x, ((kernel_size - 1) // 2, kernel_size // 2), mode="reflect")
-    x = x.squeeze(1)
-    x = x.unfold(1, kernel_size, 1)
-    x, _ = torch.sort(x, dim=-1)
-    return x[:, :, (kernel_size - 1) // 2]
+    else:
+        units = units.transpose(-1, -2)
+        units_aligned = torch.nn.functional.interpolate(units, size=n_frames, scale_factor=scale_factor, mode=units_forced_mode)
+        units_aligned = units_aligned.transpose(-1, -2)
+    
+    if not unit_is_tensor:
+        units_aligned = units_aligned.numpy()
+    if units_dim == 2:
+        units_aligned = units_aligned.squeeze(0)
+    return units_aligned
 
 def upsample(signal, factor):
     signal = signal.permute(0, 2, 1)
@@ -312,22 +311,11 @@ def clip_grad_value_(parameters, clip_value, norm_type=2):
     total_norm = total_norm ** (1. / norm_type)
     return total_norm
 
-class StepLRWithWarmUp(StepLR):
-    def __init__(self, optimizer, step_size, gamma=0.1, last_epoch=-1, warm_up_steps=1000, start_lr = 1e-6, verbose=False):
-        self.warm_up_steps = warm_up_steps
-        self.start_lr = start_lr
-        super().__init__(optimizer,step_size, gamma, last_epoch, verbose)
-
-    def get_lr(self):
-        if self.last_epoch < self.warm_up_steps:
-            return [self.start_lr + (base_lr - self.start_lr) * self.last_epoch / self.warm_up_steps
-                    for base_lr in self.base_lrs]
-        else:
-            return super().get_lr()
-
-    def _get_closed_form_lr(self):
-        if self.last_epoch < self.warm_up_steps:
-            return [self.start_lr + (base_lr - self.start_lr) * self.last_epoch / self.warm_up_steps
-                    for base_lr in self.base_lrs]
-        else:
-            return super()._get_closed_form_lr()
+def get_encdoer_out_channels(encoder):
+    if encoder == 'whisper_large_v3':
+        return 1280
+    elif encoder == 'contentvec768l12':
+        return 768
+    elif encoder == 'hubertlarge1024l24':
+        return 1024
+    raise ValueError(f"[x] Unknown encoder: {encoder}")

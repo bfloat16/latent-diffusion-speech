@@ -27,7 +27,7 @@ if __name__ == '__main__':
     
     model = get_model(**args.model.text2semantic)
     
-    if args.model.text2semantic.train.generate_audio and accelerator.is_main_process:
+    if accelerator.is_main_process:
         diffusion_model = DiffusionSVC(device=device)
         diffusion_model.load_model(model_path=cmd.model, f0_model="fcpe", f0_max=800, f0_min=65)
     else:

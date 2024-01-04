@@ -21,12 +21,11 @@ rich_progress = Progress(
     )
 
 def preprocess(path, sample_rate, f0_min, f0_max, block_size, sampling_rate):
-
     f0_extractor = F0_Extractor(sample_rate=44100, hop_size=512, f0_min=f0_min, f0_max=f0_max, block_size=block_size, model_sampling_rate=sampling_rate)
     with rich_progress:
         rank = rich_progress.add_task("Preprocess", total=len(path))
         for file in path:
-            path_f0file = file.replace('audio', 'f0', 1)
+            path_f0file = file.replace('train/audio', 'train/f0', 1)
 
             audio, _ = librosa.load(file, sr=sample_rate)
             if len(audio.shape) > 1:
@@ -47,19 +46,17 @@ def preprocess(path, sample_rate, f0_min, f0_max, block_size, sampling_rate):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_processes", type=int, default=10)
+    parser.add_argument("-n", "--num_processes", type=int, default=15)
     cmd = parser.parse_args()
+    num_processes = cmd.num_processes
     args = utils.load_config(cmd.config)
 
-    train_path = args.data.train_path
-    sample_rate = args.data.sampling_rate
-    hop_size = args.data.block_size
-    num_processes = cmd.num_processes
-
-    f0_min=args.data.f0_min
-    f0_max=args.data.f0_max
-    block_size=args.data.block_size
-    sampling_rate=args.data.sampling_rate
+    train_path = args['data']['train_path']
+    sample_rate = args['data']['sampling_rate']
+    sampling_rate = args['data']['sampling_rate']
+    f0_min=args['data']['f0_min']
+    f0_max=args['data']['f0_max']
+    block_size=args['data']['block_size']
 
     filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
     with ProcessPoolExecutor(max_workers=num_processes) as executor:

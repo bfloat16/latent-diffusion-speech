@@ -8,13 +8,10 @@ from . import utils
 from torch.utils.tensorboard import SummaryWriter
 
 class Saver(object):
-    def __init__(
-            self,
-            args,
-            initial_global_step=-1):
+    def __init__(self, args, initial_global_step=-1):
 
-        self.expdir = args.env.expdir
-        self.sample_rate = args.data.sampling_rate
+        self.expdir = args['diffusion']['train']['expdir']
+        self.sample_rate = args['data']['sampling_rate']
         self.global_step = initial_global_step
         self.init_time = time.time()
         self.last_time = time.time()
@@ -25,10 +22,8 @@ class Saver(object):
 
         os.makedirs(self.expdir, exist_ok=True)
 
-        # writer
         self.writer = SummaryWriter(self.expdir)
 
-        # save config
         path_config = os.path.join(self.expdir, 'config.yaml')
         with open(path_config, "w") as out_config:
             yaml.dump(dict(args), out_config)
@@ -48,10 +43,8 @@ class Saver(object):
         else:
             msg_str = msg
 
-        # dsplay
         print(msg_str)
 
-        # save
         with open(self.path_log_info, 'a') as fp:
             fp.write(msg_str + '\n')
 

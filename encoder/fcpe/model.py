@@ -1,15 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils import weight_norm
-import os
-import yaml
+from torch.nn.utils.parametrizations import weight_norm
 from torchaudio.transforms import Resample
 import numpy as np
 
 from .pcmer import PCmer
 from .nvSTFT import STFT
-
 
 def l2_regularization(model, l2_alpha):
     l2_loss = []
@@ -17,7 +14,6 @@ def l2_regularization(model, l2_alpha):
         if type(module) is nn.Conv2d:
             l2_loss.append((module.weight ** 2).sum() / 2.0)
     return l2_alpha * sum(l2_loss)
-
 
 class FCPE(nn.Module):
     def __init__(
@@ -83,16 +79,9 @@ class FCPE(nn.Module):
 
         # out
         self.n_out = out_dims
-        self.dense_out = weight_norm(
-            nn.Linear(n_chans, self.n_out))
+        self.dense_out = weight_norm(nn.Linear(n_chans, self.n_out))
 
     def forward(self, mel, infer=True, gt_f0=None, return_hz_f0=False, cdecoder = "local_argmax"):
-        """
-        input:
-            B x n_frames x n_unit
-        return:
-            dict of B x n_frames x feat
-        """
         if cdecoder == "argmax":
             self.cdecoder = self.cents_decoder
         elif cdecoder == "local_argmax":
@@ -165,7 +154,6 @@ class FCPE(nn.Module):
         ci = self.cent_table[None, None, :].expand(B, N, -1)
         return torch.exp(-torch.square(ci - cents) / 1250) * mask.float()
 
-
 class FCPEInfer:
     def __init__(self, model_path, device=None):
         if device is None:
@@ -203,7 +191,6 @@ class FCPEInfer:
         # f0 = (mel_f0.exp() - 1) * 700
         f0 = mel_f0
         return f0
-
 
 class Wav2Mel:
     def __init__(self, args, device=None):
@@ -250,7 +237,6 @@ class Wav2Mel:
 
     def __call__(self, audio, sample_rate, keyshift=0, train=False):
         return self.extract_mel(audio, sample_rate, keyshift=keyshift, train=train)
-
 
 class DotDict(dict):
     def __getattr__(*args):

@@ -7,4 +7,4 @@ subdirs.sort()
 
 for i, subdir in enumerate(subdirs):
     new_name = os.path.join(input_dir, str(i+1))
-    os.rename(subdir, new_name)
+    os.rename(subdir, new_name) 

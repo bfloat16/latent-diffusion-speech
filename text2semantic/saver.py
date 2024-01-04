@@ -16,7 +16,7 @@ class Saver(object):
             ):
 
         self.expdir = args.model.text2semantic.train.expdir
-        self.sample_rate = args.data.sampling_rate
+        self.sample_rate = args['data']['sampling_rate']
         self.global_step = initial_global_step
         self.init_time = time.time()
         self.last_time = time.time()

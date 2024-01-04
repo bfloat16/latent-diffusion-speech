@@ -20,6 +20,6 @@ for subdir in sorted_subdirs:
         os.makedirs(dest_dir, exist_ok=True)
         shutil.move(audio_file, dest_dir)
 
-        lab_file = audio_file.replace(".wav", ".lab")
+        lab_file = audio_file.replace(".wav", ".txt")
         if os.path.exists(lab_file):
             shutil.move(lab_file, dest_dir)

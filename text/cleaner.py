@@ -1,11 +1,9 @@
 from text import cleaned_text_to_sequence, chinese, japanese
 
-
 language_module_map = {
     'ZH': chinese,
     'JA': japanese
 }
-
 
 def clean_text(text, language):
     language_module = language_module_map[language]
@@ -23,6 +21,3 @@ def clean_text_bert(text, language):
 def text_to_sequence(text, language):
     norm_text, phones, tones, word2ph = clean_text(text, language)
     return cleaned_text_to_sequence(phones, tones, language), (norm_text, word2ph)
-
-if __name__ == '__main__':
-    pass

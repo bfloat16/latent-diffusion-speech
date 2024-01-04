@@ -5,9 +5,8 @@ from text2semantic.saver import Saver,Saver_empty
 from cluster import get_cluster_model
 from ..utils import get_topk_acc
 from tools.tools import clip_grad_value_
+from tools.tools import get_encdoer_out_channels
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
-import warnings
-warnings.filterwarnings("ignore")
 
 progress = Progress(
     TextColumn("Running: "),
@@ -53,9 +52,9 @@ def test(args, model, loader_test, diffusion_model, saver,semantic_embedding, ac
             else:
                 semantic_token = semantic_token[:,1:]
 
-            if args.train.units_quantize_type == "kmeans":
+            if args['text2semantic']['train']['units_quantize_type'] == "kmeans":
                 semantic_emb = semantic_embedding(semantic_token)
-            elif args.train.units_quantize_type == "vq":
+            elif args['text2semantic']['train']['units_quantize_type'] == "vq":
                 semantic_emb = semantic_embedding.get_codes_from_indices(semantic_token)
 
             if diffusion_model is not None:
@@ -68,8 +67,8 @@ def test(args, model, loader_test, diffusion_model, saver,semantic_embedding, ac
             topk_acc += get_topk_acc(data["semantic"][0][1:], result.logits[0][:-1,:], k = 5)
             
             if signal is not None:
-                path_audio = os.path.join(args.data.valid_path, 'audio', data['name'][0].replace(".npy",""))
-                audio, sr = librosa.load(path_audio, sr=args.data.sampling_rate)
+                path_audio = os.path.join(args['data']['valid_path'], 'audio', data['name'][0].replace(".npy",""))
+                audio, sr = librosa.load(path_audio, sr=args['data']['sampling_rate'])
                 if len(audio.shape) > 1:
                     audio = librosa.to_mono(audio)
                 audio = torch.from_numpy(audio).unsqueeze(0).to(signal)
@@ -90,7 +89,7 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
     
     clip_grad_norm = float(args.model.text2semantic.train.clip_grad_norm) if args.model.text2semantic.train.clip_grad_norm != -1 else None
 
-    if args.train.units_quantize_type == "kmeans":
+    if args['text2semantic']['train']['units_quantize_type'] == "kmeans":
         codebook = get_cluster_model(args.model.text2semantic.codebook_path)
         codebook = codebook.__dict__["cluster_centers_"]
         
@@ -101,10 +100,10 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
             )
         semantic_embedding.weight.data = torch.from_numpy(codebook)
         semantic_embedding.to(accelerator.device)
-    elif args.train.units_quantize_type == "vq":
+    elif args['text2semantic']['train']['units_quantize_type'] == "vq":
         from vector_quantize_pytorch import VectorQuantize
         semantic_embedding = VectorQuantize(
-                dim = args.data.encoder_out_channels,
+                dim = get_encdoer_out_channels(args['data']['encoder']),
                 codebook_size = args.model.text2semantic.semantic_kmeans_num,
                 decay = 0.8,             
                 commitment_weight = 1.,
@@ -114,7 +113,7 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
         semantic_embedding.load_state_dict(model_para["model"])
         semantic_embedding = semantic_embedding.to(accelerator.device)
     else:
-        raise ValueError('[x] Unknown quantize_type: ' + args.train.units_quantize_type)
+        raise ValueError('[x] Unknown quantize_type: ' + args['text2semantic']['train']['units_quantize_type'])
 
     # run
     num_batches = len(loader_train)
