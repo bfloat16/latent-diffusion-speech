@@ -87,10 +87,10 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
     else:
         saver = Saver_empty(args, initial_global_step=initial_global_step)
     
-    clip_grad_norm = float(args.model.text2semantic.train.clip_grad_norm) if args.model.text2semantic.train.clip_grad_norm != -1 else None
+    clip_grad_norm = float(args['text2semantic']['train']['clip_grad_norm']) if args['text2semantic']['train']['clip_grad_norm'] != -1 else None
 
     if args['text2semantic']['train']['units_quantize_type'] == "kmeans":
-        codebook = get_cluster_model(args.model.text2semantic.codebook_path)
+        codebook = get_cluster_model(args['text2semantic']['model']['codebook_path'])
         codebook = codebook.__dict__["cluster_centers_"]
         
         semantic_embedding = torch.nn.Embedding(
@@ -104,12 +104,12 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
         from vector_quantize_pytorch import VectorQuantize
         semantic_embedding = VectorQuantize(
                 dim = get_encdoer_out_channels(args['data']['encoder']),
-                codebook_size = args.model.text2semantic.semantic_kmeans_num,
+                codebook_size = args['text2semantic']['model']['semantic_kmeans_num'],
                 decay = 0.8,             
                 commitment_weight = 1.,
                 freeze_codebook=True
             )
-        model_para = torch.load(args.model.text2semantic.codebook_path)
+        model_para = torch.load(args['text2semantic']['model']['codebook_path'])
         semantic_embedding.load_state_dict(model_para["model"])
         semantic_embedding = semantic_embedding.to(accelerator.device)
     else:
@@ -121,7 +121,7 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
     model.train()
     with progress:
         train_task = progress.add_task("Train", total=num_batches - 1)
-        for epoch in range(start_epoch, args.model.text2semantic.train.epochs):
+        for epoch in range(start_epoch, args['text2semantic']['train']['epochs']):
             for _, data in enumerate(loader_train):
                 with accelerator.accumulate(model):
                     if accelerator.sync_gradients:
@@ -134,7 +134,7 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
                             data[k] = data[k].to(accelerator.device)
                             if k == "phone":
                                 data[k][data[k] == -100] = accelerator.unwrap_model(model).PAD
-                            if k == "tone":
+                            if k == "tone" and data[k] is not None:
                                 data[k][data[k] == -100] = accelerator.unwrap_model(model).num_tones
                             if k == "semantic":
                                 data[k][data[k] == -100] = accelerator.unwrap_model(model).semantic_pad_token_id
@@ -154,21 +154,14 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
                     current_lr = optimizer.param_groups[0]['lr']
                     progress.update(train_task, advance=1, description=f"epoch={epoch}, step={saver.global_step}, lr={current_lr:.7f}, loss={loss.item():.4f}, grad_norm={grad_norm:.4f}")
 
-                if accelerator.is_main_process and saver.global_step % args.train.interval_log == 0:
+                if accelerator.is_main_process and saver.global_step % args['text2semantic']['train']['interval_log'] == 0:
                     saver.log_value({'train/loss': loss.item()})
                     saver.log_value({'train/lr': current_lr})
 
-                if accelerator.is_main_process and saver.global_step % args.train.interval_val == 0:
-                    optimizer_save = optimizer if args.model.text2semantic.train.save_opt else None
+                if accelerator.is_main_process and saver.global_step % args['text2semantic']['train']['interval_val'] == 0:
                     unwrap_model = accelerator.unwrap_model(model)
 
-                    if saver.global_step % args.train.interval_force_save == 0:
-                        saver.save_model(unwrap_model, optimizer_save, postfix=f'{saver.global_step}_Force')
-                    else:
-                        saver.save_model(unwrap_model, optimizer, postfix=f'{saver.global_step}')
-
-                    last_val_step = saver.global_step - args.train.interval_val * (args.train.last_save_model_num + 1)
-                    saver.delete_model(postfix=f'{last_val_step}')
+                    saver.save_model(unwrap_model, optimizer, postfix=f'{saver.global_step}')
 
                     test_loss, topk_acc = test(args, unwrap_model, loader_valid, diffusion_model, saver,semantic_embedding, accelerator)
 

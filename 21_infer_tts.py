@@ -15,20 +15,8 @@ from tools.tools import get_encdoer_out_channels
 
 def parse_args(args=None, namespace=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-dm",
-        "--diffusion_model",
-        type=str,
-        required=True,
-        help="path to the diffusion model checkpoint",
-    )
-    parser.add_argument(
-        "-lm",
-        "--language_model",
-        type=str,
-        required=True,
-        help="path to the language model checkpoint",
-    )
+    parser.add_argument("-dm", "--diffusion_model", type=str, required=True, help="path to the diffusion model checkpoint")
+    parser.add_argument("-lm", "--language_model", type=str, required=True, help="path to the language model checkpoint")
     parser.add_argument(
         "-d",
         "--device",

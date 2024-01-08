@@ -2,17 +2,7 @@ import os
 from glob import glob
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
-rich_progress = Progress(
-    TextColumn("Preprocess:"),
-    BarColumn(bar_width=80), "[progress.percentage]{task.percentage:>3.1f}%",
-    "•",
-    MofNCompleteColumn(),
-    "•",
-    TimeElapsedColumn(),
-    "|",
-    TimeRemainingColumn(),
-    transient=True
-    )
+rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
 
 def main(input_dir):
     main = rich_progress.add_task("Preprocess", total=len(os.listdir(input_dir)))

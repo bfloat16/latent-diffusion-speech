@@ -1,7 +1,7 @@
 import torch
 
 def get_data_loaders(args, model, accelerate = None):
-    model_type = args.model.text2semantic.type
+    model_type = args['text2semantic']['model']['type']
     if model_type == "roformer":
         from text2semantic.roformer.dataloader import get_data_loaders
     else:

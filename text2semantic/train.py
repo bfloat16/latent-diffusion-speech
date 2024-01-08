@@ -16,16 +16,16 @@ if __name__ == '__main__':
     cmd = parse_args()
     
     args = utils.load_config(cmd.config)
-    accelerator = accelerate.Accelerator(gradient_accumulation_steps=args.model.text2semantic.train.gradient_accumulation_steps)
+    accelerator = accelerate.Accelerator(gradient_accumulation_steps=args['text2semantic']['train']['gradient_accumulation_steps'])
     device = accelerator.device
     
-    if args.model.text2semantic.type == "roformer":
+    if args['text2semantic']['model']['type'] == "roformer":
         from text2semantic.roformer.train import train
         from text2semantic.roformer.roformer import get_model
     else:
-        raise ValueError(f"[x] Unknown Model: {args.model.text2semantic.type}")
+        raise ValueError(f"[x] Unknown Model: {args['text2semantic']['model']['type']}")
     
-    model = get_model(**args.model.text2semantic)
+    model = get_model(**args['text2semantic'])
     
     if accelerator.is_main_process:
         diffusion_model = DiffusionSVC(device=device)
@@ -34,12 +34,12 @@ if __name__ == '__main__':
         diffusion_model = None
     
     optimizer = torch.optim.AdamW(model.parameters())
-    initial_global_step, model, optimizer = utils.load_model(args.model.text2semantic.train.expdir, model, optimizer, device=device)
+    initial_global_step, model, optimizer = utils.load_model(args['text2semantic']['train']['expdir'], model, optimizer, device=device)
     for param_group in optimizer.param_groups:
-        param_group['initial_lr'] = args.model.text2semantic.train.lr
-        param_group['lr'] = args.model.text2semantic.train.lr * args.model.text2semantic.train.gamma ** max((initial_global_step - 2) // args.model.text2semantic.train.decay_step, 0)
-        param_group['weight_decay'] = args.train.weight_decay
-    scheduler = StepLRWithWarmUp(optimizer, step_size=args.model.text2semantic.train.decay_step, gamma=args.model.text2semantic.train.gamma, last_epoch=initial_global_step-2, warm_up_steps=args.model.text2semantic.train.warm_up_steps, start_lr=float(args.model.text2semantic.train.start_lr))
+        param_group['initial_lr'] = args['text2semantic']['train']['lr']
+        param_group['lr'] = args['text2semantic']['train']['lr'] * args['text2semantic']['train']['gamma'] ** max((initial_global_step - 2) // args['text2semantic']['train']['decay_step'], 0)
+        param_group['weight_decay'] = args['text2semantic']['train']['weight_decay']
+    scheduler = StepLRWithWarmUp(optimizer, step_size=args['text2semantic']['train']['decay_step'], gamma=args['text2semantic']['train']['gamma'], last_epoch=initial_global_step-2, warm_up_steps=args['text2semantic']['train']['warm_up_steps'], start_lr=float(args['text2semantic']['train']['start_lr']))
     
     model = model.to(device)
     

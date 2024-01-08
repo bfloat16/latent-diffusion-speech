@@ -3,7 +3,9 @@ import time
 import yaml
 import datetime
 import torch
-import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib import pyplot as plt
 from . import utils
 from torch.utils.tensorboard import SummaryWriter
 
@@ -15,7 +17,7 @@ class Saver(object):
             initial_global_step=-1
             ):
 
-        self.expdir = args.model.text2semantic.train.expdir
+        self.expdir = args['text2semantic']['train']['expdir']
         self.sample_rate = args['data']['sampling_rate']
         self.global_step = initial_global_step
         self.init_time = time.time()

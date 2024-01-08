@@ -2,6 +2,8 @@ from transformers import RoFormerForCausalLM, RoFormerModel, RoFormerConfig, Gen
 from transformers.generation.logits_process import LogitsProcessor, LogitsProcessorList
 import torch
 from torch import nn
+from torch.nn.utils.rnn import pad_sequence
+import torch.nn.functional as F
 from text.symbols import *
 from cluster import get_cluster_model
 
@@ -16,7 +18,8 @@ def get_model(mode = "phone", semantic_kmeans_num = 10000, codebook_path = "pret
             attention_probs_dropout_prob=kwargs["model"]["encoder"]["attention_probs_dropout_prob"],
             initializer_range=kwargs["model"]["encoder"]["initializer_range"],
             layer_norm_eps=float(kwargs["model"]["encoder"]["layer_norm_eps"]),
-            max_position_embeddings = kwargs["model"]["encoder"]["max_position_embeddings"]
+            max_position_embeddings = kwargs["model"]["encoder"]["max_position_embeddings"],
+            is_decoder = False
         )
 
     decoder_config = RoFormerConfig(
@@ -29,7 +32,8 @@ def get_model(mode = "phone", semantic_kmeans_num = 10000, codebook_path = "pret
             attention_probs_dropout_prob=kwargs["model"]["decoder"]["attention_probs_dropout_prob"],
             initializer_range=kwargs["model"]["decoder"]["initializer_range"],
             layer_norm_eps=float(kwargs["model"]["decoder"]["layer_norm_eps"]),
-            max_position_embeddings = kwargs["model"]["decoder"]["max_position_embeddings"]
+            max_position_embeddings = kwargs["model"]["decoder"]["max_position_embeddings"],
+            is_decoder = True
     )
     
     model = Roformer(
@@ -38,11 +42,12 @@ def get_model(mode = "phone", semantic_kmeans_num = 10000, codebook_path = "pret
         mode = mode,
         semantic_kmeans_num = semantic_kmeans_num,
         codebook_path = codebook_path,
-        n_spk = n_spk
+        n_spk = n_spk,
+        use_flash_attn = kwargs['train']["use_flash_attn"]
     )
 
     return model
-    
+
 class EndGateLogitsProcessor(LogitsProcessor):
     def __init__(self, end_gate_threshold: float, eos_token_id: int):
         
@@ -63,6 +68,7 @@ class Roformer(nn.Module):
         semantic_kmeans_num = 10000,
         codebook_path = "pretrain/semantic_codebook.pt",
         n_spk = 1,
+        use_flash_attn = False,
         **kwargs
         ):
         super().__init__()
@@ -100,7 +106,6 @@ class Roformer(nn.Module):
         self.semantic_pad_token_id = semantic_kmeans_num + 2
 
         decoder_config.type_vocab_size = 1
-        decoder_config.is_decoder = True
         decoder_config.add_cross_attention = True
         self.semantic_decoder = RoFormerForCausalLM(decoder_config)
         self.semantic_decoder.prepare_inputs_for_generation = self.prepare_inputs_for_generation
@@ -114,6 +119,21 @@ class Roformer(nn.Module):
             self.spk_emb = nn.Embedding(n_spk + 1, encoder_config.hidden_size)
         else:
             self.spk_emb = None
+
+        self.use_flash_attn = use_flash_attn
+        if use_flash_attn:
+            self.text_encoder.get_extended_attention_mask = self.get_flash_attn_extended_attention_mask
+            self.semantic_decoder.roformer.get_extended_attention_mask = self.get_flash_attn_extended_attention_mask
+            self.semantic_decoder.roformer.invert_attention_mask = self.get_flash_attn_extended_attention_mask
+            from .roformer_flash_attn import RoFormerlashAttention2
+            for i in self.text_encoder.encoder.layer:
+                i.attention.self = RoFormerlashAttention2(config=encoder_config)
+            for i in self.semantic_decoder.roformer.encoder.layer:
+                i.attention.self = RoFormerlashAttention2(config=decoder_config,is_causal=True)
+                i.crossattention.self = RoFormerlashAttention2(config=decoder_config)
+
+    def get_flash_attn_extended_attention_mask(self, attention_mask, input_shape = None, dtype = None):
+        return attention_mask
 
     def forward(
         self,
@@ -175,7 +195,9 @@ class Roformer(nn.Module):
                  end_gate_threshold = None,
                  **kwargs
                  ):
-        
+        if self.use_flash_attn:
+            use_cache = False
+
         logits_processor = LogitsProcessorList()
         if end_gate_threshold is not None:
             logits_processor.append(EndGateLogitsProcessor(end_gate_threshold = end_gate_threshold, eos_token_id = self.semantic_eos_token_id))

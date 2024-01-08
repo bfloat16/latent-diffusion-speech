@@ -2,8 +2,8 @@ import os
 import random
 import shutil
 
-train_dir = r"D:\AI\Project\latent-diffusion-speech\data\train\audio"
-val_dir = r"D:\AI\Project\latent-diffusion-speech\data\val\audio"
+train_dir = r"data\train\audio"
+val_dir = r"data\val\audio"
 
 subdirs = [os.path.join(train_dir, d) for d in os.listdir(train_dir) if os.path.isdir(os.path.join(train_dir, d))]
 

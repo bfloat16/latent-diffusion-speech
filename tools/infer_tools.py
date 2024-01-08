@@ -49,8 +49,8 @@ class DiffusionSVC:
         self.load_f0_extractor(f0_min=f0_min, f0_max=f0_max)
 
     def load_f0_extractor(self, f0_min=None, f0_max=None):
-        self.f0_min = f0_min if (f0_min is not None) else self.args.data.f0_min
-        self.f0_max = f0_max if (f0_max is not None) else self.args.data.f0_max
+        self.f0_min = f0_min if (f0_min is not None) else self.args['data']['f0_min']
+        self.f0_max = f0_max if (f0_max is not None) else self.args['data']['f0_max']
         self.f0_extractor = F0_Extractor(
             sample_rate=44100,
             hop_size=512,

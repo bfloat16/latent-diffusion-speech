@@ -99,11 +99,15 @@ class Volume_Extractor:
         return mask
 
 class Units_Encoder:
-    def __init__(self, encoder, encoder_sample_rate=16000, encoder_hop_size=320, device=None):
+    def __init__(self, encoder, encoder_sample_rate=16000, encoder_hop_size=320, device=None, units_forced_mode='nearest'):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = device
 
+        if units_forced_mode is None:
+            units_forced_mode = 'left'
+        self.units_forced_mode = units_forced_mode
+        
         is_loaded_encoder = False
         if encoder == 'contentvec768l12':
             self.model = Audio2ContentVec768L12(device=device)
@@ -116,6 +120,11 @@ class Units_Encoder:
             is_loaded_encoder = True
         if not is_loaded_encoder:
             raise ValueError(f"[x] Unknown units encoder: {encoder}")
+
+        if self.units_forced_mode == 'rfa512to441':
+            encoder_sample_rate = encoder_sample_rate * 441 / 512
+        if self.units_forced_mode == 'rfa441to512':
+            encoder_sample_rate = encoder_sample_rate * 512 / 441
 
         self.resample_kernel = {}
         self.encoder_sample_rate = encoder_sample_rate

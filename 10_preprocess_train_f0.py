@@ -8,17 +8,7 @@ from tools.tools import F0_Extractor
 from concurrent.futures import ProcessPoolExecutor
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
-rich_progress = Progress(
-    TextColumn("Preprocess:"),
-    BarColumn(bar_width=80), "[progress.percentage]{task.percentage:>3.1f}%",
-    "•",
-    MofNCompleteColumn(),
-    "•",
-    TimeElapsedColumn(),
-    "|",
-    TimeRemainingColumn(),
-    transient=True
-    )
+rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
 
 def preprocess(path, sample_rate, f0_min, f0_max, block_size, sampling_rate):
     f0_extractor = F0_Extractor(sample_rate=44100, hop_size=512, f0_min=f0_min, f0_max=f0_max, block_size=block_size, model_sampling_rate=sampling_rate)
@@ -28,8 +18,6 @@ def preprocess(path, sample_rate, f0_min, f0_max, block_size, sampling_rate):
             path_f0file = file.replace('train/audio', 'train/f0', 1)
 
             audio, _ = librosa.load(file, sr=sample_rate)
-            if len(audio.shape) > 1:
-                audio = librosa.to_mono(audio)
             f0 = f0_extractor.extract(audio, uv_interp=False, sr=sample_rate)
 
             uv = f0 == 0
@@ -46,11 +34,11 @@ def preprocess(path, sample_rate, f0_min, f0_max, block_size, sampling_rate):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_processes", type=int, default=15)
+    parser.add_argument("-n", "--num_processes", type=int, default=1)
     cmd = parser.parse_args()
-    num_processes = cmd.num_processes
     args = utils.load_config(cmd.config)
 
+    num_processes = cmd.num_processes
     train_path = args['data']['train_path']
     sample_rate = args['data']['sampling_rate']
     sampling_rate = args['data']['sampling_rate']

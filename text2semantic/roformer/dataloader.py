@@ -57,24 +57,24 @@ def traverse_dir(
 def get_data_loaders(args,model, accelerate = None):
     data_train = TextDataset(
         path_root = args['data']['train_path'],
-        use_cache = args.model.text2semantic.train.cache_all_data,
-        n_spk = args.model.text2semantic.model.n_spk,
+        use_cache = args['text2semantic']['train']['cache_all_data'],
+        n_spk = args['common']['n_spk'],
         model = model,
         accelerate=accelerate
     )
     loader_train = torch.utils.data.DataLoader(
         data_train,
-        batch_size=args.model.text2semantic.train.batch_size,
+        batch_size=args['text2semantic']['train']['batch_size'],
         shuffle=True,
-        num_workers=args.model.text2semantic.train.num_workers if not args.model.text2semantic.train.cache_all_data else 1,
-        persistent_workers= (args.model.text2semantic.train.num_workers > 0) if not args.model.text2semantic.train.cache_all_data else False,
-        pin_memory=True if not args.model.text2semantic.train.cache_all_data else False,
+        num_workers=args['text2semantic']['train']['num_workers'] if not args['text2semantic']['train']['cache_all_data'] else 1,
+        persistent_workers= (args['text2semantic']['train']['num_workers'] > 0) if not args['text2semantic']['train']['cache_all_data'] else False,
+        pin_memory=True if not args['text2semantic']['train']['cache_all_data'] else False,
         collate_fn=colle_fn
     )
     data_valid = TextDataset(
         path_root = args['data']['valid_path'],
-        use_cache = args.model.text2semantic.train.cache_all_data,
-        n_spk = args.model.text2semantic.model.n_spk,
+        use_cache = args['text2semantic']['train']['cache_all_data'],
+        n_spk = args['common']['n_spk'],
         model = model,
         accelerate = None
     )
@@ -162,7 +162,7 @@ class TextDataset(Dataset):
                             'name_ext':name_ext
                         }
                     except Exception as e:
-                        print('[!] error :', name_ext)
+                        print('[error]: ', name_ext)
                         import traceback
                         traceback.print_exc()
                         self.paths.remove(name_ext)

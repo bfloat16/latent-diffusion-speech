@@ -3,7 +3,9 @@ import time
 import yaml
 import datetime
 import torch
-import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib import pyplot as plt
 from . import utils
 from torch.utils.tensorboard import SummaryWriter
 
