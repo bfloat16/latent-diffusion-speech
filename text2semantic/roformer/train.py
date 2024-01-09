@@ -6,21 +6,10 @@ from cluster import get_cluster_model
 from ..utils import get_topk_acc
 from tools.tools import clip_grad_value_
 from tools.tools import get_encdoer_out_channels
+from vector_quantize_pytorch import VectorQuantize
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
-progress = Progress(
-    TextColumn("Running: "),
-    BarColumn(bar_width=80), "[progress.percentage]{task.percentage:>3.1f}%",
-    "•",
-    MofNCompleteColumn(),
-    "•",
-    TimeElapsedColumn(),
-    "|",
-    TimeRemainingColumn(),
-    "•",
-    TextColumn("[progress.description]{task.description}"),
-    transient=True
-    )
+progress = Progress(TextColumn("Running: "), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn(), "•", TextColumn("[progress.description]{task.description}"))
 
 @torch.no_grad()
 def test(args, model, loader_test, diffusion_model, saver,semantic_embedding, accelerator):
@@ -81,7 +70,6 @@ def test(args, model, loader_test, diffusion_model, saver,semantic_embedding, ac
     return test_loss, topk_acc
 
 def train(args, initial_global_step, model, optimizer, scheduler, diffusion_model, loader_train, loader_valid, accelerator):
-        # saver
     if accelerator.is_main_process:
         saver = Saver(args, initial_global_step=initial_global_step)
     else:
@@ -92,16 +80,11 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
     if args['text2semantic']['train']['units_quantize_type'] == "kmeans":
         codebook = get_cluster_model(args['text2semantic']['model']['codebook_path'])
         codebook = codebook.__dict__["cluster_centers_"]
-        
-        semantic_embedding = torch.nn.Embedding(
-            codebook.shape[0],
-            codebook.shape[1],
-            _freeze = True
-            )
+        semantic_embedding = torch.nn.Embedding(codebook.shape[0], codebook.shape[1], _freeze=True)
         semantic_embedding.weight.data = torch.from_numpy(codebook)
         semantic_embedding.to(accelerator.device)
+
     elif args['text2semantic']['train']['units_quantize_type'] == "vq":
-        from vector_quantize_pytorch import VectorQuantize
         semantic_embedding = VectorQuantize(
                 dim = get_encdoer_out_channels(args['data']['encoder']),
                 codebook_size = args['text2semantic']['model']['semantic_kmeans_num'],
@@ -163,7 +146,7 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
 
                     saver.save_model(unwrap_model, optimizer, postfix=f'{saver.global_step}')
 
-                    test_loss, topk_acc = test(args, unwrap_model, loader_valid, diffusion_model, saver,semantic_embedding, accelerator)
+                    test_loss, topk_acc = test(args, unwrap_model, loader_valid, diffusion_model, saver, semantic_embedding, accelerator)
 
                     saver.log_value({'val/loss': test_loss})
                     saver.log_value({'val/top_acc@5': topk_acc})

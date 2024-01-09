@@ -3,56 +3,10 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
+from logger.utils import traverse_dir
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
-progress = Progress(
-    TextColumn("Loading: "),
-    BarColumn(bar_width=80), "[progress.percentage]{task.percentage:>3.1f}%",
-    "•",
-    MofNCompleteColumn(),
-    "•",
-    TimeElapsedColumn(),
-    "|",
-    TimeRemainingColumn(),
-    transient=True
-    )
-
-def traverse_dir(
-        root_dir,
-        extensions,
-        amount=None,
-        str_include=None,
-        str_exclude=None,
-        is_pure=False,
-        is_sort=False,
-        is_ext=True):
-    file_list = []
-    cnt = 0
-    for root, _, files in os.walk(root_dir):
-        for file in files:
-            if any([file.endswith(f".{ext}") for ext in extensions]):
-                # path
-                mix_path = os.path.join(root, file)
-                pure_path = mix_path[len(root_dir) + 1:] if is_pure else mix_path
-
-                if (amount is not None) and (cnt == amount):
-                    if is_sort:
-                        file_list.sort()
-                    return file_list
-
-                if (str_include is not None) and (str_include not in pure_path):
-                    continue
-                if (str_exclude is not None) and (str_exclude in pure_path):
-                    continue
-
-                if not is_ext:
-                    ext = pure_path.split('.')[-1]
-                    pure_path = pure_path[:-(len(ext) + 1)]
-                file_list.append(pure_path)
-                cnt += 1
-    if is_sort:
-        file_list.sort()
-    return file_list
+progress = Progress(TextColumn("Loading: "), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
 
 def get_data_loaders(args,model, accelerate = None):
     data_train = TextDataset(
@@ -61,7 +15,7 @@ def get_data_loaders(args,model, accelerate = None):
         n_spk = args['common']['n_spk'],
         model = model,
         accelerate=accelerate
-    )
+        )
     loader_train = torch.utils.data.DataLoader(
         data_train,
         batch_size=args['text2semantic']['train']['batch_size'],
@@ -95,8 +49,8 @@ class TextDataset(Dataset):
             use_cache=True,
             extensions=['npy'],
             accelerate=None,
-            model = None,
-            n_spk = None
+            model=None,
+            n_spk=None
     ):
         super().__init__()
 
@@ -122,9 +76,9 @@ class TextDataset(Dataset):
         self.spk_name_id_map = {}
 
         self.spk_id = 1
-        with progress:
-            load_task = progress.add_task("Test", total=len(self.paths))
-            if use_cache:
+        if use_cache:
+            with progress:
+                load_task = progress.add_task("Test", total=len(self.paths))
                 for name_ext in self.paths:
                     try:
                         path_utt = os.path.join(self.path_utt_root, name_ext)
@@ -162,9 +116,7 @@ class TextDataset(Dataset):
                             'name_ext':name_ext
                         }
                     except Exception as e:
-                        print('[error]: ', name_ext)
-                        import traceback
-                        traceback.print_exc()
+                        print('[error]: ', e)
                         self.paths.remove(name_ext)
                         continue
                     progress.update(load_task, advance=1)
@@ -225,7 +177,7 @@ class TextDataset(Dataset):
         
         rtn = {
             'phone': torch.LongTensor(data_buffer['phones'].astype(np.int64)),
-            'tone': torch.LongTensor(data_buffer['tones'].astype(np.int64)) if data_buffer['tones'] is not None else None,
+            'tone': torch.LongTensor(data_buffer['tones'].astype(np.int64)) if data_buffer['tones'] is len(data_buffer['tones'])!=0 else None,
             'semantic': torch.LongTensor(data_buffer['semantic_tokens'].astype(np.int64)),
             'labels': torch.LongTensor(data_buffer['semantic_tokens'].astype(np.int64)),
             'attention_mask': attention_mask,
@@ -242,7 +194,6 @@ class TextDataset(Dataset):
 
     def __len__(self):
         return len(self.paths)
-
 
 def colle_fn(batch):
     phone = []
@@ -279,11 +230,3 @@ def colle_fn(batch):
             'name':name
     }
     return rtn
-
-if __name__  == '__main__':
-    from logger import utils
-    args = utils.load_config("configs/config.yaml")
-    print(args)
-    loader_train, loader_valid = get_data_loaders(args)
-    for batch in loader_train:
-        print(batch["phone"].shape)

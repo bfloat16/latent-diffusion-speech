@@ -25,7 +25,7 @@ def load_model_vocoder(
     args = DotDict(args)
 
     if loaded_vocoder is None:
-        vocoder = Vocoder(args['vocoder']['type'], args['vocoder']['ckpt'], device=device)
+        vocoder = Vocoder(args['common']['vocoder']['type'], args['common']['vocoder']['ckpt'], device=device)
     else:
         vocoder = loaded_vocoder
 

@@ -66,7 +66,7 @@ text2semantic:
       initializer_range: 0.02
       intermediate_size: 1024
       layer_norm_eps: 1.e-12
-      max_position_embeddings: 3072
+      max_position_embeddings: 99999
       num_attention_heads: 8
       num_hidden_layers: 6
     encoder:
@@ -77,14 +77,14 @@ text2semantic:
       initializer_range: 0.02
       intermediate_size: 1024
       layer_norm_eps: 1.e-12
-      max_position_embeddings: 3072
+      max_position_embeddings: 99999
       num_attention_heads: 8
       num_hidden_layers: 6
   train:
     batch_size: 8
-    cache_all_data: true
+    cache_all_data: false
     clip_grad_norm: -1
-    decay_step: 200000
+    decay_step: 20000
     epochs: 100000
     expdir: exp/lm
     gamma: 0.5

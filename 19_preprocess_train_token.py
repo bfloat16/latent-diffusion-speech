@@ -23,14 +23,14 @@ def preprocess(rank, units_path, model,in_dir, out_dir, num_workers, units_quant
             if units_quantize_type == "kmeans":
                 unit = np.load(unit_path)
                 token = cluster.get_cluster_result(model, unit)
-                out_path = os.path.join(out_dir, unit_path)
+                out_path = os.path.join(out_dir, os.path.basename(os.path.dirname(unit_path)), os.path.basename(unit_path))
                 os.makedirs(os.path.dirname(out_path), exist_ok=True)
                 np.save(out_path, token)
             elif units_quantize_type == "vq":
                 unit = torch.from_numpy(np.load(unit_path)).to(f"cuda:{rank%num_workers}")[None,:]
                 _, token, _ = model(unit)
                 token = token[0].detach().cpu().numpy()
-                out_path = os.path.join(out_dir, unit_path)
+                out_path = os.path.join(out_dir, os.path.basename(os.path.dirname(unit_path)), os.path.basename(unit_path))
                 os.makedirs(os.path.dirname(out_path), exist_ok=True)
                 np.save(out_path, token)
             rich_progress.update(task_id, advance=1)
