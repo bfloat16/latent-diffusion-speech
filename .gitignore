@@ -5,4 +5,3 @@ pretrain/*
 dataset_raw/*
 __pycache__
 **/*.npy
-**/*.txt

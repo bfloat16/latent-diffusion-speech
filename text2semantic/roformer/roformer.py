@@ -2,8 +2,6 @@ from transformers import RoFormerForCausalLM, RoFormerModel, RoFormerConfig, Gen
 from transformers.generation.logits_process import LogitsProcessor, LogitsProcessorList
 import torch
 from torch import nn
-from torch.nn.utils.rnn import pad_sequence
-import torch.nn.functional as F
 from text.symbols import *
 from cluster import get_cluster_model
 

@@ -1,10 +1,7 @@
 from transformers.models.roformer.modeling_roformer import RoFormerSelfAttention
 import warnings
-from typing import Optional, Tuple
-
 import torch
 import torch.utils.checkpoint
-from transformers.cache_utils import Cache
 import torch.nn.functional as F
 import logging
 

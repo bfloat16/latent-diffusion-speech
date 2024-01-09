@@ -162,6 +162,7 @@ def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loade
                 if accelerator.is_main_process and saver.global_step % args['diffusion']['train']['interval_log'] == 0:
                     saver.log_value({'train/loss': loss.item()})
                     saver.log_value({'train/vq_loss': commit_loss.item() if type(commit_loss) is torch.Tensor else 0})
+                    saver.log_value({'train/grad_norm': grad_norm})
                     saver.log_value({'train/lr': current_lr})
 
                 if accelerator.is_main_process and saver.global_step % args['diffusion']['train']['interval_val'] == 0:
