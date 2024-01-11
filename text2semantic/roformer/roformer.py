@@ -5,7 +5,7 @@ from torch import nn
 from text.symbols import *
 from cluster import get_cluster_model
 
-def get_model(mode = "phone", semantic_kmeans_num = 10000, codebook_path = "pretrain/semantic_codebook.pt", n_spk = 1, **kwargs):
+def get_model(n_spk, **kwargs):
     encoder_config = RoFormerConfig(
             hidden_size=kwargs["model"]["encoder"]["hidden_size"],
             num_attention_heads=kwargs["model"]["encoder"]["num_attention_heads"],
@@ -37,9 +37,9 @@ def get_model(mode = "phone", semantic_kmeans_num = 10000, codebook_path = "pret
     model = Roformer(
         encoder_config = encoder_config,
         decoder_config = decoder_config,
-        mode = mode,
-        semantic_kmeans_num = semantic_kmeans_num,
-        codebook_path = codebook_path,
+        mode = kwargs["model"]["mode"],
+        semantic_kmeans_num = kwargs["model"]["semantic_kmeans_num"],
+        codebook_path = kwargs["model"]["codebook_path"],
         n_spk = n_spk,
         use_flash_attn = kwargs['train']["use_flash_attn"]
     )
@@ -152,7 +152,7 @@ class Roformer(nn.Module):
             spk_emb = self.spk_emb(spk_id)
         else:
             spk_emb = 0
-        phone_tone_emb = self.text_encoder.embeddings(phone,tone) + spk_emb
+        phone_tone_emb = self.text_encoder.embeddings(phone, tone) + spk_emb
         
         encoder_hidden_states = self.text_encoder(
             inputs_embeds = phone_tone_emb,

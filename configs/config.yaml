@@ -15,7 +15,6 @@ data:
 ############################################
 common:
   n_spk: 13
-  device: cuda
   vocoder:
     ckpt: pretrain/nsf_hifigan/model
     type: nsf-hifigan
@@ -66,7 +65,7 @@ text2semantic:
       initializer_range: 0.02
       intermediate_size: 1024
       layer_norm_eps: 1.e-12
-      max_position_embeddings: 99999
+      max_position_embeddings: 3072
       num_attention_heads: 8
       num_hidden_layers: 6
     encoder:
@@ -77,7 +76,7 @@ text2semantic:
       initializer_range: 0.02
       intermediate_size: 1024
       layer_norm_eps: 1.e-12
-      max_position_embeddings: 99999
+      max_position_embeddings: 3072
       num_attention_heads: 8
       num_hidden_layers: 6
   train:

@@ -25,7 +25,7 @@ if __name__ == '__main__':
     else:
         raise ValueError(f"[x] Unknown Model: {args['text2semantic']['model']['type']}")
     
-    model = get_model(**args['text2semantic'])
+    model = get_model(args['common']['n_spk'], **args['text2semantic'])
     
     if accelerator.is_main_process:
         diffusion_model = DiffusionSVC(device=device)
