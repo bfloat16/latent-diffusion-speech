@@ -14,7 +14,8 @@ data:
   valid_path: data/val
 ############################################
 common:
-  n_spk: 13
+  n_spk: 116
+  device: cuda
   vocoder:
     ckpt: pretrain/nsf_hifigan/model
     type: nsf-hifigan
@@ -32,8 +33,7 @@ diffusion:
     n_layers: 2
     use_pitch_aug: true
   train:
-    amp_dtype: fp16
-    batch_size: 50
+    batch_size: 150
     cache_all_data: false
     cache_device: cpu
     clip_grad_norm: 1
@@ -61,7 +61,7 @@ text2semantic:
       attention_probs_dropout_prob: 0.1
       hidden_act: gelu
       hidden_dropout_prob: 0.1
-      hidden_size: 512
+      hidden_size: 1024
       initializer_range: 0.02
       intermediate_size: 1024
       layer_norm_eps: 1.e-12
@@ -72,15 +72,15 @@ text2semantic:
       attention_probs_dropout_prob: 0.1
       hidden_act: gelu
       hidden_dropout_prob: 0.1
-      hidden_size: 512
+      hidden_size: 1024
       initializer_range: 0.02
-      intermediate_size: 1024
+      intermediate_size: 3072
       layer_norm_eps: 1.e-12
       max_position_embeddings: 3072
       num_attention_heads: 8
-      num_hidden_layers: 6
+      num_hidden_layers: 12
   train:
-    batch_size: 8
+    batch_size: 40
     cache_all_data: false
     clip_grad_norm: -1
     decay_step: 20000
@@ -98,4 +98,4 @@ text2semantic:
     use_units_quantize: true
     warm_up_steps: 1000
     weight_decay: 0
-    use_flash_attn: false
+    use_flash_attn: true

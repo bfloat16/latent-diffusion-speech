@@ -15,8 +15,8 @@ rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.perc
 @torch.no_grad()
 def preprocess(rank, units_path, model,in_dir, out_dir, num_workers, units_quantize_type="kmeans"):
     with rich_progress:
-        task_id = rich_progress.add_task(f"rank:{rank}", total=len(units_path))
         units_path = units_path[rank::num_workers]
+        task_id = rich_progress.add_task(f"rank:{rank}", total=len(units_path))
         if units_quantize_type == "vq":
             model = model.to(f"cuda:{rank%num_workers}")
         for unit_path in units_path:
@@ -45,7 +45,7 @@ def main(in_dir, units_quantize_type, model, num_workers=1):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=1)
+    parser.add_argument("-n", "--num_workers", type=int, default=2)
     cmd =parser.parse_args()
     args = utils.load_config(cmd.config)
     num_workers = cmd.num_workers

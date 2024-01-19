@@ -29,7 +29,7 @@ def delete_short_wav_files(folder_path, tag_duration=20):
             if duration is not None and duration >= tag_duration:
                 print(f"Deleting {wav_file}")
                 os.remove(wav_file)
-                lab_file = wav_file.replace(".wav", ".lab")
+                lab_file = wav_file.replace(".wav", ".txt")
                 os.remove(lab_file)
             rich_progress.update(main, advance=1)
 

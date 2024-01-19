@@ -16,7 +16,7 @@ if __name__ == '__main__':
     cmd = parse_args()
     
     args = utils.load_config(cmd.config)
-    accelerator = accelerate.Accelerator(gradient_accumulation_steps=args['text2semantic']['train']['gradient_accumulation_steps'])
+    accelerator = accelerate.Accelerator(gradient_accumulation_steps=args['text2semantic']['train']['gradient_accumulation_steps'], mixed_precision='fp16')
     device = accelerator.device
     
     if args['text2semantic']['model']['type'] == "roformer":

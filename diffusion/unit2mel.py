@@ -15,10 +15,7 @@ class DotDict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-def load_model_vocoder(
-        model_path,
-        device='cpu',
-        loaded_vocoder=None):
+def load_model_vocoder(model_path, device='cpu', loaded_vocoder=None):
     config_file = os.path.join(os.path.split(model_path)[0], 'config.yaml')
     with open(config_file, "r") as config:
         args = yaml.safe_load(config)
@@ -93,7 +90,7 @@ class Unit2Mel(nn.Module):
         only_cross_attention = True,
         layers_per_block = n_layers,
         resnet_time_scale_shift='scale_shift'), out_dims=out_dims)
-
+    
     def forward(self, units, f0, volume, spk_id=None, aug_shift=None, gt_spec=None, infer=True, infer_speedup=10, method='unipc', use_tqdm=False):
         if f0 is None or self.is_tts:
             f0 = 0

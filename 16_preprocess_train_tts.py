@@ -3,8 +3,6 @@ import numpy as np
 import argparse
 from logger import utils
 from logger.utils import traverse_dir
-from text.cleaner import text_to_sequence
-from text.multi_language_bert import get_bert_token
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
 rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
@@ -33,8 +31,10 @@ def preprocess(path, extensions, text2semantic_mode):
             file_name = os.path.split(file)[-1]
             text = utt_text[file_name]
             if text2semantic_mode == "phone":
-                (phones, tones, lang_ids), (norm_text, word2ph) = text_to_sequence(text, "JA")
+                from text.cleaner import text_to_sequence
+                (phones, tones, lang_ids), (norm_text, word2ph) = text_to_sequence(text, "ZH")
             elif text2semantic_mode == "text":
+                from text.chinese_bert import get_bert_token
                 tones = lang_ids = word2ph = []
                 phones, norm_text = get_bert_token(text)
             os.makedirs(os.path.dirname(path_uttfile), exist_ok=True)

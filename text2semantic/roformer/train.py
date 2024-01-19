@@ -9,10 +9,11 @@ from tools.tools import get_encdoer_out_channels
 from vector_quantize_pytorch import VectorQuantize
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
-progress = Progress(TextColumn("Running: "), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn(), "•", TextColumn("[progress.description]{task.description}"))
+progress = Progress(TextColumn("Running: "), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn(),
+                    "•", TextColumn("[progress.description]{task.description}"))
 
 @torch.no_grad()
-def test(args, model, loader_test, diffusion_model, saver,semantic_embedding, accelerator):
+def test(args, model, loader_test, diffusion_model, saver, semantic_embedding, accelerator):
     model.eval()
 
     test_loss = 0.

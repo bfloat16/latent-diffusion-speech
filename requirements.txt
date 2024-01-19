@@ -16,3 +16,4 @@ matplotlib
 pynvml
 transformers
 ninja
+g2p_en

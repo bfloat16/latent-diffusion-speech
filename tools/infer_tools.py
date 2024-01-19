@@ -93,25 +93,25 @@ class DiffusionSVC:
             return torch.nn.functional.pad(out_wav, (start_frame * self.vocoder.vocoder_hop_size, 0))
 
     @torch.no_grad()  # 最基本推理代码,将输入标准化为tensor,只与mel打交道
-    def __call__(self, units, f0, volume, spk_id=1, spk_mix_dict=None, aug_shift=0, gt_spec=None, infer_speedup=10, method='unipc', use_tqdm=True):
+    def __call__(self, units, f0, volume, spk_id=1, aug_shift=0, gt_spec=None, infer_speedup=10, method='unipc', use_tqdm=True):
         aug_shift = torch.from_numpy(np.array([[float(aug_shift)]])).float().to(self.device)
         spk_id = torch.LongTensor(np.array([[int(spk_id)]])).to(self.device)
 
-        return self.model(units, f0, volume, spk_id=spk_id, spk_mix_dict=spk_mix_dict, aug_shift=aug_shift, gt_spec=gt_spec, infer=True, infer_speedup=infer_speedup, method=method, use_tqdm=use_tqdm)
+        return self.model(units, f0, volume, spk_id=spk_id, aug_shift=aug_shift, gt_spec=gt_spec, infer=True, infer_speedup=infer_speedup, method=method, use_tqdm=use_tqdm)
 
     @torch.no_grad()  # 比__call__多了声码器代码，输出波形
-    def infer(self, units, f0, volume, gt_spec=None, spk_id=1, spk_mix_dict=None, aug_shift=0, infer_speedup=10, method='unipc', use_tqdm=True):
+    def infer(self, units, f0, volume, gt_spec=None, spk_id=1, aug_shift=0, infer_speedup=10, method='unipc', use_tqdm=True):
         gt_spec = None
-        out_mel = self.__call__(units, f0, volume, spk_id=spk_id, spk_mix_dict=spk_mix_dict, aug_shift=aug_shift, gt_spec=gt_spec, infer_speedup=infer_speedup, method=method, use_tqdm=use_tqdm)
+        out_mel = self.__call__(units, f0, volume, spk_id=spk_id, aug_shift=aug_shift, gt_spec=gt_spec, infer_speedup=infer_speedup, method=method, use_tqdm=use_tqdm)
         
-        if self.f0_extractor.f0_extractor == "fcpe" and f0 == None:
+        if f0 == None:
             f0 = self.f0_extractor.extract(None, device = out_mel.device, mel = out_mel)
             f0 = torch.tensor(f0[None,:,None],device=out_mel.device)
 
         return self.mel2wav(out_mel, f0)
 
     @torch.no_grad()  # 切片从音频推理代码
-    def infer_from_long_audio(self, audio, sr=44100, key=0, spk_id=1, spk_mix_dict=None, aug_shift=0, infer_speedup=10, method='unipc', use_tqdm=True, threhold=-60, threhold_for_split=-40, min_len=5000):
+    def infer_from_long_audio(self, audio, sr=44100, key=0, spk_id=1, aug_shift=0, infer_speedup=10, method='unipc', use_tqdm=True, threhold=-60, threhold_for_split=-40, min_len=5000):
         hop_size = self.args['data']['block_size'] * sr / self.args['data']['sampling_rate']
         segments = split(audio, sr, hop_size, db_thresh=threhold_for_split, min_len=min_len)
 
@@ -131,7 +131,7 @@ class DiffusionSVC:
                 seg_gt_spec = gt_spec[:, start_frame: start_frame + seg_units.size(1), :]
             else:
                 seg_gt_spec = None
-            seg_output = self.infer(seg_units, seg_f0, seg_volume, gt_spec=seg_gt_spec, spk_id=spk_id, spk_mix_dict=spk_mix_dict, aug_shift=aug_shift, infer_speedup=infer_speedup, method=method, use_tqdm=use_tqdm)
+            seg_output = self.infer(seg_units, seg_f0, seg_volume, gt_spec=seg_gt_spec, spk_id=spk_id, aug_shift=aug_shift, infer_speedup=infer_speedup, method=method, use_tqdm=use_tqdm)
             _left = start_frame * self.args['data']['block_size']
             _right = (start_frame + seg_units.size(1)) * self.args['data']['block_size']
             seg_output *= mask[:, _left:_right]

@@ -3,7 +3,7 @@ from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def get_bert_feature(text, word2ph, model=AutoModelForMaskedLM.from_pretrained("chinese-roberta-wwm-ext-large", cache_dir="./pretrain").to(device), tokenizer=AutoTokenizer.from_pretrained("chinese-roberta-wwm-ext-large", cache_dir="./pretrain")):
+def get_bert_feature(text, word2ph, model=AutoModelForMaskedLM.from_pretrained("IDEA-CCNL/Erlangshen-MegatronBert-1.3B", cache_dir="./pretrain").to(device), tokenizer=AutoTokenizer.from_pretrained("IDEA-CCNL/Erlangshen-MegatronBert-1.3B", cache_dir="./pretrain")):
     with torch.no_grad():
         inputs = tokenizer(text, return_tensors='pt')
         for i in inputs:
@@ -21,6 +21,6 @@ def get_bert_feature(text, word2ph, model=AutoModelForMaskedLM.from_pretrained("
     phone_level_feature = torch.cat(phone_level_feature, dim=0)
     return phone_level_feature.T
 
-def get_bert_token(text, tokenizer = AutoTokenizer.from_pretrained("chinese-roberta-wwm-ext-large", cache_dir="./pretrain")):
+def get_bert_token(text, tokenizer = AutoTokenizer.from_pretrained("IDEA-CCNL/Erlangshen-MegatronBert-1.3B", cache_dir="./pretrain")):
     inputs = tokenizer(text)
     return inputs["input_ids"], tokenizer.convert_ids_to_tokens(inputs["input_ids"])
