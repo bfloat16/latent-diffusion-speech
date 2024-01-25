@@ -25,5 +25,5 @@ def get_language_model(**args):
     else:
         raise ValueError(f" [x] Unknown Model: {model_type}")
     
-    model = get_model(**args)
+    model = get_model(args['common']['n_spk'], **args['text2semantic'])
     return model

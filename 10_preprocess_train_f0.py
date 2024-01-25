@@ -34,7 +34,7 @@ def preprocess(path, sample_rate, f0_min, f0_max, block_size, sampling_rate):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_processes", type=int, default=1)
+    parser.add_argument("-n", "--num_processes", type=int, default=10)
     cmd = parser.parse_args()
     args = utils.load_config(cmd.config)
 

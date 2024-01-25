@@ -7,13 +7,14 @@ from glob import glob
 from tqdm import tqdm
 from pathlib import Path
 from random import shuffle
-from kmeans import KMeansGPU
+from cluster.kmeans import KMeansGPU
 from sklearn.cluster import KMeans, MiniBatchKMeans
 
 def train_cluster(dataset, n_clusters, use_minibatch=True, verbose=False,use_gpu=False):
+    print('Loading features...')
     filenames = glob(f"{dataset}/*/*.wav.npy", recursive=True)
     shuffle(filenames)
-    selected_filenames = filenames[:20000]
+    selected_filenames = filenames[:30000]
 
     if os.path.exists(tempset):
         shutil.rmtree(tempset)
@@ -26,6 +27,7 @@ def train_cluster(dataset, n_clusters, use_minibatch=True, verbose=False,use_gpu
         np.save(save_path, not_processed_feature)
     filename = glob(f"{tempset}/*.wav.npy", recursive=True)
 
+    print('Concatenate features...')
     features = []
     for path in tqdm(filename):
         features.append(np.load(path))
@@ -56,7 +58,7 @@ if __name__ == "__main__":
     parser.add_argument('--tempset', type=Path, default="./cluster/temp")
     parser.add_argument('--output', type=Path, default="pretrain")
     parser.add_argument('--gpu',action='store_true', default=True)
-    parser.add_argument('--n_clusters', type=int, default=2048)
+    parser.add_argument('--n_clusters', type=int, default=4096)
 
     args = parser.parse_args()
 

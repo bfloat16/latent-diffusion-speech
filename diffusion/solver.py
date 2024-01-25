@@ -5,19 +5,8 @@ from logger.saver import Saver, Saver_empty
 from tools.tools import clip_grad_value_
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
-progress = Progress(
-    TextColumn("Running: "),
-    BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%",
-    "•",
-    MofNCompleteColumn(),
-    "•",
-    TimeElapsedColumn(),
-    "|",
-    TimeRemainingColumn(),
-    "•",
-    TextColumn("[progress.description]{task.description}"),
-    transient=True
-    )
+progress = Progress(TextColumn("Running: "), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn(), 
+                    "•", TextColumn("[progress.description]{task.description}"))
 
 def test(args, model, vocoder, loader_test, f0_extractor, quantizer, saver, accelerator):
     model.eval()
@@ -166,15 +155,13 @@ def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loade
                     saver.log_value({'train/lr': current_lr})
 
                 if accelerator.is_main_process and saver.global_step % args['diffusion']['train']['interval_val'] == 0:
-                    unwrap_model = accelerator.unwrap_model(model)
-                    saver.save_model(unwrap_model, optimizer, postfix=f'{saver.global_step}')
-
                     if args['text2semantic']['train']['units_quantize_type'] == "vq":
                         saver.save_model(quantizer, None, postfix=f'{saver.global_step}_semantic_codebook')
 
+                    unwrap_model = accelerator.unwrap_model(model)
                     test_loss = test(args, unwrap_model, vocoder, loader_test, f0_extractor, quantizer, saver, accelerator)
                     saver.log_value({'val/loss': test_loss})
-
+                    saver.save_model(unwrap_model, optimizer, postfix=f'{saver.global_step}')
                     model.train()
                 accelerator.wait_for_everyone()
             progress.reset(train_task)

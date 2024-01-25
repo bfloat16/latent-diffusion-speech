@@ -13,7 +13,7 @@ from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, Ti
 rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
 
 @torch.no_grad()
-def preprocess(rank, units_path, model,in_dir, out_dir, num_workers, units_quantize_type="kmeans"):
+def preprocess(rank, units_path, model,out_dir, num_workers, units_quantize_type="kmeans"):
     with rich_progress:
         units_path = units_path[rank::num_workers]
         task_id = rich_progress.add_task(f"rank:{rank}", total=len(units_path))
@@ -40,12 +40,12 @@ def main(in_dir, units_quantize_type, model, num_workers=1):
     os.makedirs(out_dir, exist_ok=True)
     units_dir = os.path.join(in_dir, "units")
     filelist = glob(f"{units_dir}/**/*.npy", recursive=True)
-    mp.spawn(preprocess, args=(filelist, model,in_dir, out_dir, num_workers, units_quantize_type), nprocs=num_workers, join=True)
+    mp.spawn(preprocess, args=(filelist, model, out_dir, num_workers, units_quantize_type), nprocs=num_workers, join=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default='configs/config.yaml')
-    parser.add_argument("-n", "--num_workers", type=int, default=2)
+    parser.add_argument("-n", "--num_workers", type=int, default=10)
     cmd =parser.parse_args()
     args = utils.load_config(cmd.config)
     num_workers = cmd.num_workers

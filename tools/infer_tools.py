@@ -105,8 +105,8 @@ class DiffusionSVC:
         out_mel = self.__call__(units, f0, volume, spk_id=spk_id, aug_shift=aug_shift, gt_spec=gt_spec, infer_speedup=infer_speedup, method=method, use_tqdm=use_tqdm)
         
         if f0 == None:
-            f0 = self.f0_extractor.extract(None, device = out_mel.device, mel = out_mel)
-            f0 = torch.tensor(f0[None,:,None],device=out_mel.device)
+            f0 = self.f0_extractor.extract(None, mel=out_mel)
+            f0 = torch.tensor(f0[None,:,None], device=out_mel.device)
 
         return self.mel2wav(out_mel, f0)
 

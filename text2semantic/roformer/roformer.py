@@ -80,7 +80,7 @@ class Roformer(nn.Module):
             token_size += 3
         if "text" in self.mode:
             from transformers import BertTokenizer
-            bert_tokenizer = BertTokenizer.from_pretrained("bert-base-multilingual-cased", cache_dir="./pretrain")
+            bert_tokenizer = BertTokenizer.from_pretrained("IDEA-CCNL/Erlangshen-MegatronBert-1.3B", cache_dir="./pretrain")
             token_size = bert_tokenizer.vocab_size
             self.BOS = bert_tokenizer.cls_token_id
             self.EOS = bert_tokenizer.sep_token_id

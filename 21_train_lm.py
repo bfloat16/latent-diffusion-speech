@@ -9,7 +9,7 @@ from tools.tools import StepLRWithWarmUp
 def parse_args(args=None, namespace=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, default="configs/config.yaml")
-    parser.add_argument("-m", "--model", type=str, default="exp/diffusion/model_560000.pt")
+    parser.add_argument("-m", "--model", type=str, default="exp/diffusion/model_380000.pt")
     return parser.parse_args(args=args, namespace=namespace)
 
 if __name__ == '__main__':
@@ -29,7 +29,7 @@ if __name__ == '__main__':
     
     if accelerator.is_main_process:
         diffusion_model = DiffusionSVC(device=device)
-        diffusion_model.load_model(model_path=cmd.model, f0_max=800, f0_min=65)
+        diffusion_model.load_model(model_path=cmd.model, f0_max=1200, f0_min=40)
     else:
         diffusion_model = None
     

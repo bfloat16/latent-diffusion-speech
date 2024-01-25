@@ -115,8 +115,8 @@ class Units_Encoder:
         if encoder == 'whisper_large_v3':
             self.model = WhisperLargeV3(device=device)
             is_loaded_encoder = True
-        if encoder == 'hubertlarge1024l24':
-            self.model = Audio2HubertLarge1024L24(device=device)
+        if encoder == 'xlsr_53_56k':
+            self.model = Audio2xlsr_53_56k(device=device)
             is_loaded_encoder = True
         if not is_loaded_encoder:
             raise ValueError(f"[x] Unknown units encoder: {encoder}")
@@ -143,7 +143,7 @@ class Units_Encoder:
             if isinstance(audio, np.ndarray):
                 _audio = audio
             else:
-                _audio = audio.cpu().numpy()
+                _audio = audio.cpu().numpy()    
             audio_res = librosa.resample(_audio, orig_sr=sample_rate, target_sr=self.encoder_sample_rate)
             audio_res = torch.from_numpy(audio_res).to(self.device)
 
@@ -181,10 +181,10 @@ class Audio2ContentVec768L12():
         units = feats
         return units
 
-class Audio2HubertLarge1024L24():
-    def __init__(self, path='pretrain/chinese-hubert-large-fairseq-ckpt.pt', device='cpu'):
+class Audio2xlsr_53_56k():
+    def __init__(self, path='pretrain/xlsr_53_56k.pt', device='cpu'):
         self.device = device
-        print('HubertLarge1024L24')
+        print('xlsr_53_56k')
         self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
         self.hubert = self.models[0]
         self.hubert = self.hubert.to(self.device)
@@ -193,18 +193,13 @@ class Audio2HubertLarge1024L24():
 
     def __call__(self, audio, padding_mask=None):
         with torch.no_grad():
-            if padding_mask is None:
-                padding_mask = torch.BoolTensor(audio.shape).fill_(False)
-            else:
-                padding_mask = padding_mask.bool()
-                padding_mask = ~padding_mask if torch.all(padding_mask) else padding_mask
+            padding_mask = torch.BoolTensor(audio.shape).fill_(False)
             inputs = {
                 "source": audio.to(self.device),
-                "padding_mask": padding_mask.to(self.device),
-                "output_layer": 24,
+                "padding_mask": padding_mask.to(self.device)
             }
             logits = self.hubert.extract_features(**inputs)
-            units = logits[0]
+            units = logits["x"][0]
             return units
         
 class WhisperLargeV3(torch.nn.Module):
@@ -325,6 +320,6 @@ def get_encdoer_out_channels(encoder):
         return 1280
     elif encoder == 'contentvec768l12':
         return 768
-    elif encoder == 'hubertlarge1024l24':
+    elif encoder == 'xlsr_53_56k':
         return 1024
     raise ValueError(f"[x] Unknown encoder: {encoder}")
