@@ -118,7 +118,7 @@ class Units_Encoder:
             self.model = WhisperLargeV3(device=device)
             is_loaded_encoder = True
         if encoder == 'w2v-bert':
-            self.model = Wav2Vec2Bert(encoder_ckpt, device=device)
+            self.model = Wav2Vec2Bert(device=device)
             is_loaded_encoder = True
         if encoder == 'xlsr_53_56k':
             self.model = Audio2xlsr_53_56k(device=device)
@@ -211,7 +211,7 @@ class WhisperLargeV3(torch.nn.Module):
             return units
         
 class Wav2Vec2Bert:
-    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
+    def __init__(self, device='cpu'):
         self.device = device
         self.processor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0", cache_dir="pretrain")
         self.model = Wav2Vec2BertModel.from_pretrained("facebook/w2v-bert-2.0", cache_dir="pretrain")
