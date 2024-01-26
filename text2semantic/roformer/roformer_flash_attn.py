@@ -4,11 +4,7 @@ import torch
 import torch.utils.checkpoint
 import torch.nn.functional as F
 import logging
-
-from transformers.utils import (
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10
-)
+from transformers.utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -77,27 +73,27 @@ class RoFormerlashAttention2(RoFormerSelfAttention):
         value_states = value_layer.transpose(1, 2)
         dropout_rate = self.dropout.p if self.training else 0.0
         input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            else:
-                target_dtype = self.query.weight.dtype
+        if torch.is_autocast_enabled():
+            target_dtype = torch.get_autocast_gpu_dtype()
+        else:
+            target_dtype = self.query.weight.dtype
 
-            if not self.has_warned:
+        if target_dtype == torch.float32:
                 logging.warning(
                     f"The input hidden states seems to be silently casted in float32, this might be related to"
-                    f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                    f" {target_dtype}."
+                    f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in bfloat16"
                 )
                 self.has_warned = True
 
+        if input_dtype == torch.float32:
             query_states = query_states.to(torch.bfloat16)
             key_states = key_states.to(torch.bfloat16)
             value_states = value_states.to(torch.bfloat16)
+            
         attn_output = self._flash_attention_forward(query_states, key_states, value_states, encoder_attention_mask, attention_mask, q_len, k_len, dropout=dropout_rate)
 
         if input_dtype == torch.float32:
-            attn_output = attn_output.to(target_dtype)
+            attn_output = attn_output.to(input_dtype)
 
         if head_mask is not None:
             attn_output = attn_output * head_mask

@@ -3,6 +3,7 @@ import torch
 import librosa
 import torch.nn as nn
 from fairseq import checkpoint_utils
+from transformers import AutoFeatureExtractor, Wav2Vec2BertModel, AutoProcessor
 from torchaudio.transforms import Resample
 from torch.optim.lr_scheduler import StepLR
 from encoder.whisper.audio import log_mel_spectrogram
@@ -103,6 +104,7 @@ class Units_Encoder:
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = device
+        self.encoder = encoder
 
         if units_forced_mode is None:
             units_forced_mode = 'left'
@@ -114,6 +116,9 @@ class Units_Encoder:
             is_loaded_encoder = True
         if encoder == 'whisper_large_v3':
             self.model = WhisperLargeV3(device=device)
+            is_loaded_encoder = True
+        if encoder == 'w2v-bert':
+            self.model = Wav2Vec2Bert(encoder_ckpt, device=device)
             is_loaded_encoder = True
         if encoder == 'xlsr_53_56k':
             self.model = Audio2xlsr_53_56k(device=device)
@@ -137,7 +142,7 @@ class Units_Encoder:
             else:
                 key_str = str(sample_rate)
                 if key_str not in self.resample_kernel:
-                    self.resample_kernel[key_str] = Resample(sample_rate, self.encoder_sample_rate, lowpass_filter_width=128).to(self.device)
+                    self.resample_kernel[key_str] = Resample(sample_rate, self.encoder_sample_rate).to(self.device)
                 audio_res = self.resample_kernel[key_str](audio)
         else:
             if isinstance(audio, np.ndarray):
@@ -146,6 +151,9 @@ class Units_Encoder:
                 _audio = audio.cpu().numpy()    
             audio_res = librosa.resample(_audio, orig_sr=sample_rate, target_sr=self.encoder_sample_rate)
             audio_res = torch.from_numpy(audio_res).to(self.device)
+
+        if self.encoder == 'w2v-bert':
+            audio_res = audio_res.cpu().numpy()
 
         if audio_res.size(-1) < 400:
             audio_res = torch.nn.functional.pad(audio, (0, 400 - audio_res.size(-1)))
@@ -181,27 +189,6 @@ class Audio2ContentVec768L12():
         units = feats
         return units
 
-class Audio2xlsr_53_56k():
-    def __init__(self, path='pretrain/xlsr_53_56k.pt', device='cpu'):
-        self.device = device
-        print('xlsr_53_56k')
-        self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
-        self.hubert = self.models[0]
-        self.hubert = self.hubert.to(self.device)
-        self.hubert = self.hubert.float()
-        self.hubert.eval()
-
-    def __call__(self, audio, padding_mask=None):
-        with torch.no_grad():
-            padding_mask = torch.BoolTensor(audio.shape).fill_(False)
-            inputs = {
-                "source": audio.to(self.device),
-                "padding_mask": padding_mask.to(self.device)
-            }
-            logits = self.hubert.extract_features(**inputs)
-            units = logits["x"][0]
-            return units
-        
 class WhisperLargeV3(torch.nn.Module):
     def __init__(self, device='cuda'):
         super().__init__()
@@ -221,6 +208,43 @@ class WhisperLargeV3(torch.nn.Module):
         mel = log_mel_spectrogram(audio).to(self.device)
         with torch.no_grad():
             units = self.model.encoder(mel).squeeze().data.cpu().float()
+            return units
+        
+class Wav2Vec2Bert:
+    def __init__(self, path, h_sample_rate=16000, h_hop_size=320, device='cpu'):
+        self.device = device
+        self.processor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0", cache_dir="pretrain")
+        self.model = Wav2Vec2BertModel.from_pretrained("facebook/w2v-bert-2.0", cache_dir="pretrain")
+        self.model.eval()
+        self.model.to(device)
+
+    @torch.no_grad()
+    def __call__(self, audio, padding_mask=None):  # B, T
+        inputs = self.processor(audio, sampling_rate=16000, return_tensors="pt")
+        for k, input in inputs.items():
+            inputs[k] = input.to(self.device)
+        outputs = self.model(**inputs)
+        return outputs.last_hidden_state
+    
+class Audio2xlsr_53_56k():
+    def __init__(self, path='pretrain/xlsr_53_56k.pt', device='cpu'):
+        self.device = device
+        print('xlsr_53_56k')
+        self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
+        self.hubert = self.models[0]
+        self.hubert = self.hubert.to(self.device)
+        self.hubert = self.hubert.float()
+        self.hubert.eval()
+
+    def __call__(self, audio, padding_mask=None):
+        with torch.no_grad():
+            padding_mask = torch.BoolTensor(audio.shape).fill_(False)
+            inputs = {
+                "source": audio.to(self.device),
+                "padding_mask": padding_mask.to(self.device)
+            }
+            logits = self.hubert.extract_features(**inputs)
+            units = logits["x"][0]
             return units
         
 class StepLRWithWarmUp(StepLR):

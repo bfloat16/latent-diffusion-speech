@@ -49,8 +49,10 @@ if __name__ == '__main__':
             quantizer = VectorQuantize(
                 dim = get_encdoer_out_channels(args['data']['encoder']),
                 codebook_size = args['text2semantic']['train']['semantic_kmeans_num'],
+                codebook_dim = 32,
                 decay = 0.8,
-                commitment_weight = 1.
+                commitment_weight = 1.,
+                use_cosine_sim=True
                 ).to(device)
         else:
             raise ValueError('[Error] Unknown quantize_type: ' + args['text2semantic']['train']['units_quantize_type'])

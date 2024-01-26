@@ -56,7 +56,9 @@ if __name__ == '__main__':
                     codebook_size = args['text2semantic']['model']['semantic_kmeans_num'],
                     decay = 0.8,             
                     commitment_weight = 1.,
-                    freeze_codebook=True
+                    freeze_codebook=True,
+                    use_cosine_sim=True,
+                    codebook_dim = 32
                 )
             model_para = torch.load(args['text2semantic']['model']['codebook_path'])
             semantic_embedding.load_state_dict(model_para["model"])
@@ -104,7 +106,8 @@ if __name__ == '__main__':
             semantic_emb = semantic_embedding(semantic_token)
         elif args['text2semantic']['train']['units_quantize_type'] == "vq":
             semantic_emb = semantic_embedding.get_codes_from_indices(semantic_token)
-            semantic_emb = units_forced_alignment(semantic_emb, scale_factor=(diffusion_svc.args['data']['sampling_rate']/diffusion_svc.args['data']['block_size'])/(diffusion_svc.args.data.encoder_sample_rate/args.data.encoder_hop_size))
+            semantic_emb = units_forced_alignment(semantic_emb,
+                                                  scale_factor=(diffusion_svc.args['data']['sampling_rate']/diffusion_svc.args['data']['block_size'])/(diffusion_svc.args.data.encoder_sample_rate/args.data.encoder_hop_size))
 
         wav = diffusion_svc.infer(semantic_emb,f0=None,volume=None, spk_id = spk_id, infer_speedup=speedup, method=method)
         

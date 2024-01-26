@@ -90,7 +90,7 @@ text2semantic:
     gradient_accumulation_steps: 1
     lr: 0.0002
     interval_log: 100
-    interval_val: 1000
+    interval_val: 2000
     num_workers: 2
     save_opt: true
     start_lr: 0.00001

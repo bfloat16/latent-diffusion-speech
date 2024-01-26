@@ -15,6 +15,8 @@ def test(args, model, vocoder, loader_test, f0_extractor, quantizer, saver, acce
     num_batches = len(loader_test)
 
     with torch.no_grad():
+        utilization = 0
+        count = torch.zeros(args.model.text2semantic.semantic_kmeans_num).to(accelerator.device)
         test_task = progress.add_task("Test", total=num_batches)
         for _, data in enumerate(loader_test):
             fn = data['name'][0]
@@ -37,6 +39,7 @@ def test(args, model, vocoder, loader_test, f0_extractor, quantizer, saver, acce
                     commit_loss = 0
                 elif args['text2semantic']['train']['units_quantize_type'] == "vq":
                     data['units'], indices, commit_loss = quantizer(data['units'])
+                    count += torch.bincount(indices.flatten(), minlength=args.model.text2semantic.semantic_kmeans_num)
                 else:
                     raise ValueError('[x] Unknown quantize_type: ' + args['text2semantic']['train']['units_quantize_type'])
             else:
@@ -83,6 +86,9 @@ def test(args, model, vocoder, loader_test, f0_extractor, quantizer, saver, acce
             progress.update(test_task, advance=1)
 
     test_loss /= num_batches
+    utilization = torch.sum(count > 0).item() / args.model.text2semantic.semantic_kmeans_num
+    test_loss = test_loss.item()
+    saver.log_value({'valid/utilization': utilization})
     progress.remove_task(test_task)
     return test_loss
 
