@@ -44,37 +44,17 @@ def load_svc_model(args, vocoder_dimension):
                 args['diffusion']['model']['block_out_channels'],
                 args['diffusion']['model']['n_heads'],
                 args['diffusion']['model']['n_hidden'],
-                is_tts = args['diffusion']['model']['is_tts']
+                args['data']['acoustic_scale']
                 )
     return model
 
 class Unit2Mel(nn.Module):
-    def __init__(
-            self,
-            input_channel,
-            n_spk,
-            use_pitch_aug=False,
-            out_dims=128,
-            n_layers=2,
-            block_out_channels=(256,384,512,512),
-            n_heads=8,
-            n_hidden=256,
-            is_tts: bool = False
-            ):
+    def __init__(self, input_channel, n_spk, out_dims=128, n_layers=2, block_out_channels=(256,384,512,512), n_heads=8, n_hidden=256, acoustic_scale=1.0):
         super().__init__()
         self.unit_embed = nn.Linear(input_channel, n_hidden)
-        self.is_tts = is_tts
-        if not is_tts:
-            self.f0_embed = nn.Linear(1, n_hidden)
-            self.volume_embed = nn.Linear(1, n_hidden)
-            if use_pitch_aug:
-                self.aug_shift_embed = nn.Linear(1, n_hidden, bias=False)
-            else:
-                self.aug_shift_embed = None
-        else:
-            self.aug_shift_embed = None
-            self.f0_embed = None
-            self.volume_embed = None
+        self.aug_shift_embed = None
+        self.f0_embed = None
+        self.volume_embed = None
 
         self.n_spk = n_spk
         if n_spk is not None and n_spk > 1:
@@ -89,7 +69,7 @@ class Unit2Mel(nn.Module):
         attention_head_dim = n_heads,
         only_cross_attention = True,
         layers_per_block = n_layers,
-        resnet_time_scale_shift='scale_shift'), out_dims=out_dims)
+        resnet_time_scale_shift='scale_shift'), out_dims=out_dims, acoustic_scale=acoustic_scale)
     
     def forward(self, units, f0, volume, spk_id=None, aug_shift=None, gt_spec=None, infer=True, infer_speedup=10, method='unipc', use_tqdm=False):
         if f0 is None or self.is_tts:

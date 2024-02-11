@@ -108,10 +108,12 @@ class Roformer(nn.Module):
         self.semantic_decoder = RoFormerForCausalLM(decoder_config)
         self.semantic_decoder.prepare_inputs_for_generation = self.prepare_inputs_for_generation
         
-        self.quantizer = get_cluster_model(codebook_path)
-
-        if self.semantic_decoder.roformer.embeddings.word_embeddings.weight.data.shape[1] == self.quantizer.cluster_centers_.shape[1]:
-            self.semantic_decoder.roformer.embeddings.word_embeddings.weight.data[:semantic_kmeans_num] = torch.from_numpy(self.quantizer.cluster_centers_.copy())
+        try:
+            self.quantizer = get_cluster_model(codebook_path)
+            if self.semantic_decoder.roformer.embeddings.word_embeddings.weight.data.shape[1] == self.quantizer.cluster_centers_.shape[1]:
+                self.semantic_decoder.roformer.embeddings.word_embeddings.weight.data[:semantic_kmeans_num] = torch.from_numpy(self.quantizer.cluster_centers_.copy())
+        except:
+            pass
 
         if n_spk > 1 and n_spk is not None:
             self.spk_emb = nn.Embedding(n_spk + 1, encoder_config.hidden_size)
@@ -147,7 +149,7 @@ class Roformer(nn.Module):
         return_dict=None,
         spk_id=None,
         **kwargs
-    ):
+        ):
         if self.spk_emb is not None and spk_id is not None:
             spk_emb = self.spk_emb(spk_id)
         else:

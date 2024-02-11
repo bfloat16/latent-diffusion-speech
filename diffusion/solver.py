@@ -1,14 +1,12 @@
 import os
 import torch
 import librosa
-from logger.saver import Saver, Saver_empty
+from tools.saver import Saver, Saver_empty
 from tools.tools import clip_grad_value_
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
+progress = Progress(TextColumn("Running: "), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn(), "•", TextColumn("[progress.description]{task.description}"))
 
-progress = Progress(TextColumn("Running: "), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn(), 
-                    "•", TextColumn("[progress.description]{task.description}"))
-
-def test(args, model, vocoder, loader_test, f0_extractor, quantizer, saver, accelerator):
+def test(args, model, vocoder, loader_test, quantizer, saver, accelerator):
     model.eval()
 
     test_loss = 0.
@@ -56,12 +54,7 @@ def test(args, model, vocoder, loader_test, f0_extractor, quantizer, saver, acce
                 method=args['common']['infer']['method'],
                 )
             
-            if data['f0'] is None:
-                f0 = f0_extractor.model(mel=mel, infer=True, return_hz_f0=True)[:,:,0]
-            else:
-                f0 = data['f0']
-
-            signal = vocoder.infer(mel, f0)
+            signal = vocoder.infer(mel)
 
             loss = model(
                 data['units'],
@@ -75,7 +68,10 @@ def test(args, model, vocoder, loader_test, f0_extractor, quantizer, saver, acce
             test_loss += loss.item()
             test_loss += commit_loss
 
-            saver.log_spec(data['name'][0], data['mel'], mel)
+            gt_wav = vocoder.infer(data['mel'])
+            gt_mel = vocoder.vocoder.get_mel(gt_wav[0,...])
+            mel = vocoder.vocoder.get_mel(signal[0,...])
+            saver.log_spec(data['name'][0], gt_mel, mel)
 
             path_audio = os.path.join(args['data']['valid_path'], 'audio', data['name_ext'][0])
             audio, sr = librosa.load(path_audio, sr=args['data']['sampling_rate'])
@@ -102,12 +98,6 @@ def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loade
 
     device = accelerator.device
 
-    if args['diffusion']['model']['is_tts']:
-        from encoder.fcpe.model import FCPEInfer
-        f0_extractor = FCPEInfer(model_path='pretrain/fcpe.pt')
-    else:
-        f0_extractor = None
-
     num_batches = len(loader_train)
     start_epoch = initial_global_step // num_batches
     model.train()
@@ -116,12 +106,6 @@ def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loade
         for epoch in range(start_epoch, args['diffusion']['train']['epochs']):
             for _, data in enumerate(loader_train):
                 with accelerator.accumulate(model):
-                    if args['diffusion']['model']['is_tts']:
-                        data['f0'] = None
-                    if args['diffusion']['model']['is_tts']:
-                        data['volume'] = None
-                    if args['diffusion']['model']['is_tts']:
-                        data['aug_shift'] = None
                     if accelerator.sync_gradients:
                         saver.global_step_increment()
 
@@ -159,13 +143,12 @@ def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loade
                     saver.log_value({'train/vq_loss': commit_loss.item() if type(commit_loss) is torch.Tensor else 0})
                     saver.log_value({'train/grad_norm': grad_norm})
                     saver.log_value({'train/lr': current_lr})
-
-                if accelerator.is_main_process and saver.global_step % args['diffusion']['train']['interval_val'] == 0:
+                    
                     if args['text2semantic']['train']['units_quantize_type'] == "vq":
                         saver.save_model(quantizer, None, postfix=f'{saver.global_step}_semantic_codebook')
 
                     unwrap_model = accelerator.unwrap_model(model)
-                    test_loss = test(args, unwrap_model, vocoder, loader_test, f0_extractor, quantizer, saver, accelerator)
+                    test_loss = test(args, unwrap_model, vocoder, loader_test, quantizer, saver, accelerator)
                     saver.log_value({'val/loss': test_loss})
                     saver.save_model(unwrap_model, optimizer, postfix=f'{saver.global_step}')
                     model.train()

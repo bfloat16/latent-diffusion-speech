@@ -87,8 +87,7 @@ class Saver(object):
             model,
             optimizer,
             name='model',
-            postfix='',
-            to_json=False):
+            postfix=''):
         # path
         if postfix:
             postfix = '_' + postfix
@@ -109,33 +108,20 @@ class Saver(object):
                 'global_step': self.global_step,
                 'model': model.state_dict()}, path_pt)
 
-        # to json
-        if to_json:
-            path_json = os.path.join(
-                self.expdir, name + '.json')
-            utils.to_json(path_pt, path_json)
-
     def delete_model(self, name='model', postfix=''):
-        # path
         if postfix:
             postfix = '_' + postfix
         path_pt = os.path.join(
             self.expdir, name + postfix + '.pt')
 
-        # delete
         if os.path.exists(path_pt):
             os.remove(path_pt)
 
     def global_step_increment(self):
         self.global_step += 1
 
-
 class Saver_empty(object):
-    def __init__(
-            self,
-            args,
-            initial_global_step=-1
-            ):
+    def __init__(self,args,initial_global_step=-1):
 
         pass
 

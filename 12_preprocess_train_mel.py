@@ -5,14 +5,14 @@ import argparse
 import torch
 import random
 from glob import glob
-from logger import utils
+from tools import utils
 from diffusion.vocoder import Vocoder
 from concurrent.futures import ProcessPoolExecutor
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
 rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
 
-def preprocess(path, sample_rate, type, ckpt, device='cuda', use_pitch_aug=False):
+def preprocess(path, sample_rate, type, ckpt, device='cuda'):
     mel_extractor = Vocoder(type, ckpt, device=device)
 
     with rich_progress:
@@ -31,12 +31,8 @@ def preprocess(path, sample_rate, type, ckpt, device='cuda', use_pitch_aug=False
             max_amp = float(torch.max(torch.abs(audio_t))) + 1e-5
             max_shift = min(1, np.log10(1 / max_amp))
             log10_vol_shift = random.uniform(-1, max_shift)
-            if use_pitch_aug:
-                keyshift = random.uniform(-5, 5)
-            else:
-                keyshift = 0
 
-            aug_mel_t = mel_extractor.extract(audio_t * (10 ** log10_vol_shift), sample_rate, keyshift=keyshift)
+            aug_mel_t = mel_extractor.extract(audio_t * (10 ** log10_vol_shift), sample_rate, keyshift=0)
             aug_mel = aug_mel_t.squeeze().to('cpu').numpy()
 
             os.makedirs(os.path.dirname(path_melfile), exist_ok=True)
@@ -58,6 +54,7 @@ if __name__ == '__main__':
     sample_rate = args.data.sampling_rate
     type = args.common.vocoder.type
     ckpt = args.common.vocoder.ckpt
+    only_mean=args["vocoder"]["only_mean"]
 
     filelist = glob(f"{train_path}/audio/**/*.wav", recursive=True)
     with ProcessPoolExecutor(max_workers=num_processes) as executor:

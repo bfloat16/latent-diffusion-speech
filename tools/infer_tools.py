@@ -4,7 +4,7 @@ import torch.nn.functional
 from tqdm import tqdm
 from diffusion.unit2mel import load_model_vocoder
 from tools.slicer import split
-from tools.tools import F0_Extractor, Volume_Extractor, Units_Encoder, cross_fade
+from tools.tools import Volume_Extractor, Units_Encoder, cross_fade
 
 class DiffusionSVC:
     def __init__(self, device=None):
@@ -17,7 +17,6 @@ class DiffusionSVC:
         self.vocoder = None
         self.args = None
         self.units_encoder = None
-        self.f0_extractor = None
         self.f0_model = None
         self.f0_min = None
         self.f0_max = None
@@ -46,33 +45,11 @@ class DiffusionSVC:
             model_sampling_rate=self.args['data']['sampling_rate']
         )
 
-        self.load_f0_extractor(f0_min=f0_min, f0_max=f0_max)
-
-    def load_f0_extractor(self, f0_min=None, f0_max=None):
-        self.f0_min = f0_min if (f0_min is not None) else self.args['data']['f0_min']
-        self.f0_max = f0_max if (f0_max is not None) else self.args['data']['f0_max']
-        self.f0_extractor = F0_Extractor(
-            sample_rate=44100,
-            hop_size=512,
-            f0_min=self.f0_min,
-            f0_max=self.f0_max,
-            block_size=self.args['data']['block_size'],
-            model_sampling_rate=self.args['data']['sampling_rate']
-        )
-
     @torch.no_grad()
     def encode_units(self, audio, sr=44100, padding_mask=None):
         assert self.units_encoder is not None
         hop_size = self.args['data']['block_size'] * sr / self.args['data']['sampling_rate']
         return self.units_encoder.encode(audio, sr, hop_size, padding_mask=padding_mask)
-
-    @torch.no_grad()
-    def extract_f0(self, audio, key=0, sr=44100, silence_front=0):
-        assert self.f0_extractor is not None
-        f0 = self.f0_extractor.extract(audio, uv_interp=True, device=self.device, silence_front=silence_front, sr=sr)
-        f0 = torch.from_numpy(f0).float().to(self.device).unsqueeze(-1).unsqueeze(0)
-        f0 = f0 * 2 ** (float(key) / 12)
-        return f0
 
     @torch.no_grad()
     def extract_volume_and_mask(self, audio, sr=44100, threhold=-60.0):
@@ -103,10 +80,6 @@ class DiffusionSVC:
     def infer(self, units, f0, volume, gt_spec=None, spk_id=1, aug_shift=0, infer_speedup=10, method='unipc', use_tqdm=True):
         gt_spec = None
         out_mel = self.__call__(units, f0, volume, spk_id=spk_id, aug_shift=aug_shift, gt_spec=gt_spec, infer_speedup=infer_speedup, method=method, use_tqdm=use_tqdm)
-        
-        if f0 == None:
-            f0 = self.f0_extractor.extract(None, mel=out_mel)
-            f0 = torch.tensor(f0[None,:,None], device=out_mel.device)
 
         return self.mel2wav(out_mel, f0)
 

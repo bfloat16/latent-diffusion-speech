@@ -5,11 +5,10 @@ import numpy as np
 import torch.multiprocessing as mp
 import argparse
 from glob import glob
-from logger import utils
+from tools import utils
 from tools.tools import get_encdoer_out_channels
 from vector_quantize_pytorch import VectorQuantize
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
-
 rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
 
 @torch.no_grad()

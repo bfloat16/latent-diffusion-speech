@@ -1,6 +1,6 @@
 import argparse
 import torch
-from logger import utils
+from tools import utils
 from text2semantic.utils import get_data_loaders
 import accelerate
 from tools.infer_tools import DiffusionSVC

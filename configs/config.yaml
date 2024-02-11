@@ -1,4 +1,5 @@
 data:
+  acoustic_scale: 1.0
   block_size: 512
   duration: 1
   encoder: whisper_large_v3
@@ -17,8 +18,10 @@ common:
   n_spk: 323
   device: cuda
   vocoder:
-    ckpt: pretrain/nsf_hifigan/model
-    type: nsf-hifigan
+    ckpt: pretrain/hifi-vaegan
+    type: hifi-vaegan
+    only_mean: true
+    clamp: 10.0
   infer:
     method: unipc
     speedup: 10
@@ -26,7 +29,6 @@ common:
 diffusion:
   model:
     block_out_channels: [256,384,512,512]
-    is_tts: true
     n_chans: 512
     n_heads: 8
     n_hidden: 256

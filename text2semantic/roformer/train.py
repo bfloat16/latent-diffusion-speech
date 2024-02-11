@@ -45,7 +45,7 @@ def test(args, model, loader_test, diffusion_model, saver, semantic_embedding, a
             if args['text2semantic']['train']['units_quantize_type'] == "kmeans":
                 semantic_emb = semantic_embedding(semantic_token)
             elif args['text2semantic']['train']['units_quantize_type'] == "vq":
-                semantic_emb = semantic_embedding.get_codes_from_indices(semantic_token)
+                semantic_emb = semantic_embedding.project_out(semantic_embedding.get_codes_from_indices(semantic_token[:,:,None]))
 
             if diffusion_model is not None:
                 signal = diffusion_model.infer(semantic_emb, None, None, use_tqdm=False)
@@ -89,8 +89,10 @@ def train(args, initial_global_step, model, optimizer, scheduler, diffusion_mode
         semantic_embedding = VectorQuantize(
                 dim = get_encdoer_out_channels(args['data']['encoder']),
                 codebook_size = args['text2semantic']['model']['semantic_kmeans_num'],
+                codebook_dim=32,
                 decay = 0.8,             
                 commitment_weight = 1.,
+                use_cosine_sim=True,
                 freeze_codebook=True
             )
         model_para = torch.load(args['text2semantic']['model']['codebook_path'])

@@ -1,8 +1,8 @@
 import os
 import numpy as np
 import argparse
-from logger import utils
-from logger.utils import traverse_dir
+from tools import utils
+from tools.utils import traverse_dir
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
 rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())

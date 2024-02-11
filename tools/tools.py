@@ -3,70 +3,11 @@ import torch
 import librosa
 import torch.nn as nn
 from fairseq import checkpoint_utils
-from transformers import AutoFeatureExtractor, Wav2Vec2BertModel, AutoProcessor
+from transformers import AutoFeatureExtractor, Wav2Vec2BertModel
 from torchaudio.transforms import Resample
 from torch.optim.lr_scheduler import StepLR
 from encoder.whisper.audio import log_mel_spectrogram
 from encoder.whisper.model import ModelDimensions, Whisper
-
-class F0_Extractor:
-    def __init__(self, sample_rate=44100, hop_size=512, f0_min=65, f0_max=800, block_size=None, model_sampling_rate=None):
-        self.block_size = block_size
-        self.model_sampling_rate = model_sampling_rate
-        self.sample_rate = sample_rate
-        self.hop_size = hop_size
-        self.f0_min = f0_min
-        self.f0_max = f0_max
-        self.transformer_f0 = None
-        if (self.block_size is not None) or (self.model_sampling_rate is not None):
-            assert (self.block_size is not None) and (self.model_sampling_rate is not None)
-            self.hop_size_follow_input = True
-        else:
-            self.hop_size_follow_input = False
-
-    def extract(self, audio, uv_interp=False, silence_front=0, sr=None, mel=None):
-        if sr is not None:
-            assert self.hop_size_follow_input
-            self.hop_size = self.block_size * sr / self.model_sampling_rate
-            self.sample_rate = sr
-
-        if audio is not None:
-            raw_audio = audio
-            n_frames = int(len(audio) // self.hop_size) + 1
-
-            start_frame = int(silence_front * self.sample_rate / self.hop_size)
-            real_silence_front = start_frame * self.hop_size / self.sample_rate
-            audio = audio[int(np.round(real_silence_front * self.sample_rate)):]
-
-        _JUMP_SAFE_PAD = False
-        if self.transformer_f0 is None:
-            from encoder.fcpe.model import FCPEInfer
-            self.transformer_f0 = FCPEInfer(model_path='pretrain/fcpe.pt')
-        if _JUMP_SAFE_PAD:
-            raw_audio = audio
-        if mel is None:
-            f0 = self.transformer_f0(audio=raw_audio, sr=self.sample_rate)
-        else:
-            if audio is None:
-                n_frames = mel.shape[1]
-            f0 = self.transformer_f0.model(mel=mel, infer=True, return_hz_f0=True)
-        f0 = f0.transpose(1, 2)
-        if not _JUMP_SAFE_PAD:
-            f0 = torch.nn.functional.interpolate(f0, size=int(n_frames), mode='nearest')
-        f0 = f0.transpose(1, 2)
-        f0 = f0.squeeze().cpu().numpy()
-        if _JUMP_SAFE_PAD:
-            f0 = np.array(
-                [f0[int(min(int(np.round(n * self.hop_size / self.sample_rate / 0.01)), len(f0) - 1))] for n in
-                    range(n_frames - start_frame)])
-            f0 = np.pad(f0.astype('float'), (start_frame, n_frames - len(f0) - start_frame))
-        
-        if uv_interp:
-            uv = f0 == 0
-            if len(f0[~uv]) > 0:
-                f0[uv] = np.interp(np.where(uv)[0], np.where(~uv)[0], f0[~uv])
-            f0[f0 < self.f0_min] = self.f0_min
-        return f0
 
 class Volume_Extractor:
     def __init__(self, hop_size=512, block_size=None, model_sampling_rate=None):
@@ -111,9 +52,6 @@ class Units_Encoder:
         self.units_forced_mode = units_forced_mode
         
         is_loaded_encoder = False
-        if encoder == 'contentvec768l12':
-            self.model = Audio2ContentVec768L12(device=device)
-            is_loaded_encoder = True
         if encoder == 'whisper_large_v3':
             self.model = WhisperLargeV3(device=device)
             is_loaded_encoder = True
@@ -152,41 +90,16 @@ class Units_Encoder:
             audio_res = librosa.resample(_audio, orig_sr=sample_rate, target_sr=self.encoder_sample_rate)
             audio_res = torch.from_numpy(audio_res).to(self.device)
 
-        if self.encoder == 'w2v-bert':
+        if self.encoder == 'w2v-bert' and isinstance(audio_res, torch.Tensor):
             audio_res = audio_res.cpu().numpy()
 
-        if audio_res.size(-1) < 400:
+        if isinstance(audio_res, torch.Tensor) and audio_res.size(-1) < 400:
             audio_res = torch.nn.functional.pad(audio, (0, 400 - audio_res.size(-1)))
         units = self.model(audio_res, padding_mask=padding_mask)
 
-        return units
+        if units.shape[0] == 1:
+            units = units.squeeze(0)
 
-class Audio2ContentVec768L12():
-    def __init__(self, path='pretrain/contentvec.pt', device='cpu'):
-        self.device = device
-        print('ContentVec')
-        self.models, self.saved_cfg, self.task = checkpoint_utils.load_model_ensemble_and_task([path], suffix="", )
-        self.hubert = self.models[0]
-        self.hubert = self.hubert.to(self.device)
-        self.hubert.eval()
-
-    def __call__(self, audio, padding_mask=None):
-        wav_tensor = audio
-        feats = wav_tensor.view(1, -1)
-        if padding_mask is None:
-            padding_mask = torch.BoolTensor(feats.shape).fill_(False)
-        else:
-            padding_mask = padding_mask.bool()
-            padding_mask = ~padding_mask if torch.all(padding_mask) else padding_mask
-        inputs = {
-            "source": feats.to(wav_tensor.device),
-            "padding_mask": padding_mask.to(wav_tensor.device),
-            "output_layer": 12,
-        }
-        with torch.no_grad():
-            logits = self.hubert.extract_features(**inputs)
-            feats = logits[0]
-        units = feats
         return units
 
 class WhisperLargeV3(torch.nn.Module):
@@ -207,6 +120,8 @@ class WhisperLargeV3(torch.nn.Module):
         audio = audio.view(1,-1)
         mel = log_mel_spectrogram(audio).to(self.device)
         with torch.no_grad():
+            if len(mel.shape) == 2:
+                mel = mel.unsqueeze(0)
             units = self.model.encoder(mel).squeeze().data.cpu().float()
             return units
         
@@ -244,7 +159,7 @@ class Audio2xlsr_53_56k():
                 "padding_mask": padding_mask.to(self.device)
             }
             logits = self.hubert.extract_features(**inputs)
-            units = logits["x"][0]
+            units = logits["x"]
             return units
         
 class StepLRWithWarmUp(StepLR):

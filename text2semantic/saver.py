@@ -6,17 +6,10 @@ import torch
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
-from . import utils
 from torch.utils.tensorboard import SummaryWriter
 
-
 class Saver(object):
-    def __init__(
-            self,
-            args,
-            initial_global_step=-1
-            ):
-
+    def __init__(self, args, initial_global_step=-1):
         self.expdir = args['text2semantic']['train']['expdir']
         self.sample_rate = args['data']['sampling_rate']
         self.global_step = initial_global_step
@@ -62,20 +55,12 @@ class Saver(object):
                 seconds=total_time))[:-5]
         return total_time
 
-    def save_model(
-            self,
-            model,
-            optimizer,
-            name='model',
-            postfix='',
-            to_json=False):
-        # path
+    def save_model(self, model, optimizer, name='model', postfix=''):
         if postfix:
             postfix = '_' + postfix
         path_pt = os.path.join(
             self.expdir, name + postfix + '.pt')
 
-        # save
         if optimizer is not None:
             torch.save({
                 'global_step': self.global_step,
@@ -86,33 +71,20 @@ class Saver(object):
                 'global_step': self.global_step,
                 'model': model.state_dict()}, path_pt)
 
-        # to json
-        if to_json:
-            path_json = os.path.join(
-                self.expdir, name + '.json')
-            utils.to_json(path_pt, path_json)
-
     def delete_model(self, name='model', postfix=''):
-        # path
         if postfix:
             postfix = '_' + postfix
         path_pt = os.path.join(
             self.expdir, name + postfix + '.pt')
 
-        # delete
         if os.path.exists(path_pt):
             os.remove(path_pt)
 
     def global_step_increment(self):
         self.global_step += 1
 
-
 class Saver_empty(object):
-    def __init__(
-            self,
-            args,
-            initial_global_step=-1
-            ):
+    def __init__(self, args, initial_global_step=-1):
 
         pass
 
@@ -134,13 +106,7 @@ class Saver_empty(object):
     def get_total_time(self, to_str=True):
         pass
 
-    def save_model(
-            self,
-            model,
-            optimizer,
-            name='model',
-            postfix='',
-            to_json=False):
+    def save_model(self, model, optimizer, name='model', postfix=''):
         pass
 
     def delete_model(self, name='model', postfix=''):

@@ -7,42 +7,29 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
-
 def exists(x):
     return x is not None
-
 
 def default(val, d):
     if exists(val):
         return val
     return d() if isfunction(d) else d
 
-
 def extract(a, t, x_shape):
     b, *_ = t.shape
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
-
 
 def noise_like(shape, device, repeat=False):
     repeat_noise = lambda: torch.randn((1, *shape[1:]), device=device).repeat(shape[0], *((1,) * (len(shape) - 1)))
     noise = lambda: torch.randn(shape, device=device)
     return repeat_noise() if repeat else noise()
 
-
 def linear_beta_schedule(timesteps, max_beta=0.02):
-    """
-    linear schedule
-    """
     betas = np.linspace(1e-4, max_beta, timesteps)
     return betas
 
-
 def cosine_beta_schedule(timesteps, s=0.008):
-    """
-    cosine schedule
-    as proposed in https://openreview.net/forum?id=-NEXDKk8gZ
-    """
     steps = timesteps + 1
     x = np.linspace(0, steps, steps)
     alphas_cumprod = np.cos(((x / steps) + s) / (1 + s) * np.pi * 0.5) ** 2
@@ -50,22 +37,13 @@ def cosine_beta_schedule(timesteps, s=0.008):
     betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
     return np.clip(betas, a_min=0, a_max=0.999)
 
-
 beta_schedule = {
     "cosine": cosine_beta_schedule,
-    "linear": linear_beta_schedule,
-}
-
+    "linear": linear_beta_schedule
+    }
 
 class GaussianDiffusion(nn.Module):
-    def __init__(self, 
-                denoise_fn, 
-                out_dims=128,
-                timesteps=1000, 
-                k_step=1000,
-                max_beta=0.02,
-                spec_min=-12, 
-                spec_max=2):
+    def __init__(self, denoise_fn, out_dims=128, timesteps=1000, k_step=1000, max_beta=0.02, spec_min=-12, spec_max=2, acoustic_scale=1.0):
         super().__init__()
         self.denoise_fn = denoise_fn
         self.out_dims = out_dims
@@ -100,13 +78,13 @@ class GaussianDiffusion(nn.Module):
         self.register_buffer('posterior_variance', to_torch(posterior_variance))
         # below: log calculation clipped because the posterior variance is 0 at the beginning of the diffusion chain
         self.register_buffer('posterior_log_variance_clipped', to_torch(np.log(np.maximum(posterior_variance, 1e-20))))
-        self.register_buffer('posterior_mean_coef1', to_torch(
-            betas * np.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod)))
-        self.register_buffer('posterior_mean_coef2', to_torch(
-            (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
+        self.register_buffer('posterior_mean_coef1', to_torch(betas * np.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod)))
+        self.register_buffer('posterior_mean_coef2', to_torch((1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
 
         self.register_buffer('spec_min', torch.FloatTensor([spec_min])[None, None, :out_dims])
         self.register_buffer('spec_max', torch.FloatTensor([spec_max])[None, None, :out_dims])
+        self.norm_spec = lambda x: x * acoustic_scale
+        self.denorm_spec = lambda x: x / acoustic_scale
 
     def q_mean_variance(self, x_start, t):
         mean = extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
@@ -115,16 +93,10 @@ class GaussianDiffusion(nn.Module):
         return mean, variance, log_variance
 
     def predict_start_from_noise(self, x_t, t, noise):
-        return (
-                extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
-                extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
-        )
+        return (extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise)
 
     def q_posterior(self, x_start, x_t, t):
-        posterior_mean = (
-                extract(self.posterior_mean_coef1, t, x_t.shape) * x_start +
-                extract(self.posterior_mean_coef2, t, x_t.shape) * x_t
-        )
+        posterior_mean = (extract(self.posterior_mean_coef1, t, x_t.shape) * x_start + extract(self.posterior_mean_coef2, t, x_t.shape) * x_t)
         posterior_variance = extract(self.posterior_variance, t, x_t.shape)
         posterior_log_variance_clipped = extract(self.posterior_log_variance_clipped, t, x_t.shape)
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
@@ -160,11 +132,6 @@ class GaussianDiffusion(nn.Module):
         
     @torch.no_grad()
     def p_sample_plms(self, x, t, interval, cond, clip_denoised=True, repeat_noise=False):
-        """
-        Use the PLMS method from
-        [Pseudo Numerical Methods for Diffusion Models on Manifolds](https://arxiv.org/abs/2202.09778).
-        """
-
         def get_x_pred(x, noise_t, t):
             a_t = extract(self.alphas_cumprod, t, x.shape)
             a_prev = extract(self.alphas_cumprod, torch.max(t - interval, torch.zeros_like(t)), x.shape)
@@ -201,10 +168,7 @@ class GaussianDiffusion(nn.Module):
 
     def q_sample(self, x_start, t, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
-        return (
-                extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start +
-                extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
-        )
+        return (extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start + extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise)
 
     def p_losses(self, x_start, t, cond, noise=None, loss_type='l2'):
         noise = default(noise, lambda: torch.randn_like(x_start))
@@ -222,17 +186,7 @@ class GaussianDiffusion(nn.Module):
 
         return loss
 
-    def forward(self, 
-                condition, 
-                gt_spec=None, 
-                infer=True,
-                infer_speedup=10, 
-                method='dpm-solver',
-                k_step=None,
-                use_tqdm=False):
-        """
-            conditioning diffusion, use fastspeech2 encoder output as the condition
-        """
+    def forward(self, condition, gt_spec=None, infer=True, infer_speedup=10, method='dpm-solver', k_step=None, use_tqdm=False):
         cond = condition.transpose(1, 2)
         b, device = condition.shape[0], condition.device
 

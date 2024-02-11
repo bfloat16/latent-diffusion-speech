@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
-from logger.utils import traverse_dir
+from tools.utils import traverse_dir
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
 progress = Progress(TextColumn("Loading: "), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
@@ -132,11 +132,11 @@ class TextDataset(Dataset):
 
                 phones, tones, lang_ids, word2ph = np.load(path_utt, allow_pickle=True)
 
-                if tones == []:
+                if tones is []:
                     tones = None
-                if lang_ids == []:
+                if lang_ids is []:
                     lang_ids = None
-                if word2ph == []:
+                if word2ph is []:
                     word2ph = None
 
                 if self.n_spk is not None and self.n_spk > 1:

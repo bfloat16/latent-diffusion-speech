@@ -1,6 +1,6 @@
 import argparse
 import torch
-from logger import utils
+from tools import utils
 from diffusion.data_loaders import get_data_loaders
 from diffusion.solver import train
 from diffusion.unit2mel import Unit2Mel
@@ -36,7 +36,7 @@ if __name__ == '__main__':
         args['diffusion']['model']['block_out_channels'],
         args['diffusion']['model']['n_heads'],
         args['diffusion']['model']['n_hidden'],
-        is_tts=args['diffusion']['model']['is_tts']
+        args['data']['acoustic_scale']
         )
 
     if args['text2semantic']['train']['use_units_quantize']:
