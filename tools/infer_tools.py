@@ -17,9 +17,6 @@ class DiffusionSVC:
         self.vocoder = None
         self.args = None
         self.units_encoder = None
-        self.f0_model = None
-        self.f0_min = None
-        self.f0_max = None
         self.volume_extractor = None
         self.speaker_encoder = None
         self.resample_dict_16000 = {}
@@ -28,7 +25,7 @@ class DiffusionSVC:
         self.naive_model_args = None
         self.use_combo_model = False
 
-    def load_model(self, model_path, f0_min=None, f0_max=None):
+    def load_model(self, model_path):
         self.model_path = model_path
         self.model, self.vocoder, self.args = load_model_vocoder(model_path, device=self.device)
 

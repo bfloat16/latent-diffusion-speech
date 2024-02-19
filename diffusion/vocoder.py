@@ -29,7 +29,5 @@ class Vocoder:
         mel = self.vocoder.extract(audio_res, keyshift=keyshift, **kwargs)  # B, n_frames, bins
         return mel
 
-    def infer(self, mel, f0):
-        f0 = torch.squeeze(f0, -1)
-        audio = self.vocoder(mel, f0)
-        return audio
+    def infer(self, mel):
+        return self.vocoder(mel)

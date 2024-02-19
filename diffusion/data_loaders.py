@@ -104,7 +104,7 @@ class AudioDataset(Dataset):
         if load_all_data:
             print('Load all the data from :', path_root)
         else:
-            print('Load the f0, volume data from :', path_root)
+            print('Load the volume data from :', path_root)
 
         t_spk_id = 1
         with progress:
@@ -112,7 +112,6 @@ class AudioDataset(Dataset):
             for name_ext in self.paths:
                 path_audio = os.path.join(self.path_root, 'audio', name_ext)
                 duration = librosa.get_duration(path=path_audio, sr=self.sample_rate)
-                f0 = None
                 aug_vol = None
                 volume = None
                 keyshift = 0
@@ -142,7 +141,6 @@ class AudioDataset(Dataset):
                         'mel': mel,
                         'aug_mel': aug_mel,
                         'units': units,
-                        'f0': f0,
                         'volume': volume,
                         'aug_vol': aug_vol,
                         'spk_id': spk_id,
@@ -152,7 +150,6 @@ class AudioDataset(Dataset):
                 else:
                     self.data_buffer[name_ext] = {
                         'duration': duration,
-                        'f0': f0,
                         'volume': volume,
                         'aug_vol': aug_vol,
                         'spk_id': spk_id,
@@ -210,12 +207,11 @@ class AudioDataset(Dataset):
         mel = mel[start_frame: start_frame + units_frame_len, :]
 
         aug_shift = np.array([-1])
-        f0_frames = np.array([-1])
         volume_frames = np.array([-1])
 
         spk_id = data_buffer.get('spk_id')
 
-        return dict(mel=mel, f0=f0_frames, volume=volume_frames, units=units, spk_id=spk_id, aug_shift=aug_shift, name=name, name_ext=name_ext)
+        return dict(mel=mel, volume=volume_frames, units=units, spk_id=spk_id, aug_shift=aug_shift, name=name, name_ext=name_ext)
 
     def __len__(self):
         return len(self.paths)

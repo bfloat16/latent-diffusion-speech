@@ -21,8 +21,6 @@ def test(args, model, vocoder, loader_test, quantizer, saver, accelerator):
             progress.update(test_task, description=f"audio={fn}")
             
             if args['diffusion']['model']['is_tts']:
-                data['f0'] = None
-            if args['diffusion']['model']['is_tts']:
                 data['volume'] = None
             if args['diffusion']['model']['is_tts']:
                 data['aug_shift'] = None
@@ -45,7 +43,6 @@ def test(args, model, vocoder, loader_test, quantizer, saver, accelerator):
 
             mel = model(
                 data['units'],
-                data['f0'],
                 data['volume'],
                 data['spk_id'],
                 gt_spec=data['mel'],
@@ -58,7 +55,6 @@ def test(args, model, vocoder, loader_test, quantizer, saver, accelerator):
 
             loss = model(
                 data['units'],
-                data['f0'],
                 data['volume'],
                 data['spk_id'],
                 gt_spec=data['mel'],
@@ -126,7 +122,7 @@ def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loade
                     else:
                         commit_loss = 0
 
-                    loss = model(data['units'].float(), data['f0'], data['volume'], data['spk_id'], aug_shift=data['aug_shift'], gt_spec=data['mel'].float(), infer=False) + commit_loss
+                    loss = model(data['units'].float(), data['volume'], data['spk_id'], aug_shift=data['aug_shift'], gt_spec=data['mel'].float(), infer=False) + commit_loss
                     
                     accelerator.backward(loss)
                     grad_norm = clip_grad_value_(model.parameters(), clip_grad_norm)

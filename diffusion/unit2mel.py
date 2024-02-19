@@ -53,7 +53,6 @@ class Unit2Mel(nn.Module):
         super().__init__()
         self.unit_embed = nn.Linear(input_channel, n_hidden)
         self.aug_shift_embed = None
-        self.f0_embed = None
         self.volume_embed = None
 
         self.n_spk = n_spk
@@ -71,17 +70,13 @@ class Unit2Mel(nn.Module):
         layers_per_block = n_layers,
         resnet_time_scale_shift='scale_shift'), out_dims=out_dims, acoustic_scale=acoustic_scale)
     
-    def forward(self, units, f0, volume, spk_id=None, aug_shift=None, gt_spec=None, infer=True, infer_speedup=10, method='unipc', use_tqdm=False):
-        if f0 is None or self.is_tts:
-            f0 = 0
-        else:
-            f0 = self.f0_embed((1 + f0 / 700).log())
+    def forward(self, units, volume, spk_id=None, aug_shift=None, gt_spec=None, infer=True, infer_speedup=10, method='unipc', use_tqdm=False):
         if volume is None or self.is_tts:
             volume = 0
         else:
             volume = self.volume_embed(volume)
 
-        x = self.unit_embed(units) + f0 + volume
+        x = self.unit_embed(units) + volume
 
         if self.n_spk is not None and self.n_spk > 1:
             x = x + self.spk_embed(spk_id - 1)

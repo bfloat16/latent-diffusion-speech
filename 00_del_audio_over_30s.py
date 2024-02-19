@@ -2,17 +2,7 @@ import os
 import glob
 import torchaudio
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
-
-rich_progress = Progress(
-    TextColumn("Preprocess:"),
-    BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%",
-    "•",
-    MofNCompleteColumn(),
-    "•",
-    TimeElapsedColumn(),
-    "|",
-    TimeRemainingColumn()
-    )
+rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
 
 def get_wav_duration(wav_file):
     waveform, sample_rate = torchaudio.load(wav_file)

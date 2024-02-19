@@ -8,7 +8,6 @@ from tools import utils
 from tools.tools import Units_Encoder
 from concurrent.futures import ProcessPoolExecutor
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
-
 rich_progress = Progress(TextColumn("Preprocess:"), BarColumn(), "[progress.percentage]{task.percentage:>3.1f}%", "•", MofNCompleteColumn(), "•", TimeElapsedColumn(), "|", TimeRemainingColumn())
 
 def preprocess(path, sample_rate, hop_size, encoder, encoder_sample_rate, encoder_hop_size, units_forced_mode, device='cuda'):
