@@ -7,6 +7,8 @@ Personally modified version, for experimental testing only. >>> [Original Branch
 
 The code is being cleaned, training and inference are currently unavailable, and keams will also be removed.
 
+Collecting Japanese data and writing text cleaner.
+
 ## About:
 Synced commits: 87b42cbaee19c90a914dbe4bfa5a527732739147
 
